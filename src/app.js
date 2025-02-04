@@ -21,7 +21,7 @@ app.use(cors());
 app.use("/api/reports", reportRoutes);
 app.use("/api/cities", cityRoutes);
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
