@@ -1,12 +1,20 @@
-// src/controllers/reportController.js
 const mongoose = require("mongoose");
 const Report = require("../models/Report");
+const City = require("../models/City");
 
-// Função para criar uma nova denúncia
+// Criar uma nova denúncia e associá-la à cidade
 exports.createReport = async (req, res) => {
   try {
-    const { reportType, address, imageUrl, city, referencia, rua, status } =
-      req.body;
+    const {
+      reportType,
+      address,
+      imageUrl,
+      city,
+      referencia,
+      rua,
+      status,
+      description,
+    } = req.body;
 
     if (!reportType || !address || !city || !status) {
       return res
@@ -14,6 +22,14 @@ exports.createReport = async (req, res) => {
         .json({ message: "Todos os campos são obrigatórios." });
     }
 
+    // Buscar a cidade associada à denúncia
+    const cityData = await City.findOne({ id: city.id });
+
+    if (!cityData) {
+      return res.status(404).json({ message: "Cidade não encontrada." });
+    }
+
+    // Criar o novo relatório
     const newReport = new Report({
       city,
       reportType,
@@ -22,23 +38,18 @@ exports.createReport = async (req, res) => {
       referencia,
       rua,
       status,
+      description,
     });
 
     await newReport.save();
 
+    // Adicionar o ID da denúncia ao reportList da cidade
+    cityData.modules.reports.reportList.push(newReport._id);
+    await cityData.save();
+
     res.status(201).json({
       message: "Denúncia criada com sucesso!",
-      report: {
-        _id: newReport._id,
-        city: newReport.city,
-        reportType: newReport.reportType,
-        address: newReport.address,
-        imageUrl: newReport.imageUrl,
-        createdAt: newReport.createdAt,
-        referencia: newReport.referencia,
-        rua: newReport.rua,
-        status: newReport.status,
-      },
+      report: newReport,
     });
   } catch (error) {
     console.error("Erro ao criar denúncia:", error);
@@ -46,6 +57,7 @@ exports.createReport = async (req, res) => {
   }
 };
 
+// Buscar todas as denúncias
 exports.getAllReports = async (req, res) => {
   try {
     const reports = await Report.find();
@@ -56,6 +68,7 @@ exports.getAllReports = async (req, res) => {
   }
 };
 
+// Buscar denúncia por ID
 exports.getReportById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -77,11 +90,11 @@ exports.getReportById = async (req, res) => {
   }
 };
 
+// Deletar denúncia e removê-la do reportList da cidade
 exports.deleteReport = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Verifica se o ID é válido
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "ID inválido." });
     }
@@ -92,9 +105,45 @@ exports.deleteReport = async (req, res) => {
       return res.status(404).json({ message: "Denúncia não encontrada." });
     }
 
+    // Remover o ID da denúncia do reportList da cidade associada
+    await City.findOneAndUpdate(
+      { id: report.city.id },
+      { $pull: { "modules.reports.reportList": id } }
+    );
+
     res.status(200).json({ message: "Denúncia deletada com sucesso!" });
   } catch (error) {
     console.error("Erro ao deletar denúncia:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+// Buscar todas as denúncias de uma cidade
+exports.getReportsByCity = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+
+    if (!cityId) {
+      return res.status(400).json({ message: "ID da cidade é obrigatório." });
+    }
+
+    const cityData = await City.findOne({ id: cityId }).populate(
+      "modules.reports.reportList"
+    );
+
+    if (!cityData) {
+      return res.status(404).json({ message: "Cidade não encontrada." });
+    }
+
+    if (!cityData.modules.reports.enabled) {
+      return res.status(403).json({
+        message: "Este município não possui o módulo de denúncias ativo.",
+      });
+    }
+
+    res.status(200).json(cityData.modules.reports.reportList);
+  } catch (error) {
+    console.error("Erro ao buscar denúncias por cidade:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 };

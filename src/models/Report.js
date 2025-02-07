@@ -5,7 +5,8 @@ const ReportSchema = new mongoose.Schema(
   {
     reportType: { type: String, required: true },
     address: { type: String, required: true },
-    imageUrl: { type: String, required: true }, // Armazena a imagem como Base64
+    imageUrl: { type: String, required: true },
+    description: { type: String, required: false },
     referencia: { type: String, required: false },
     rua: { type: String, required: false },
     status: { type: String, required: true },
