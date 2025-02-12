@@ -42,7 +42,6 @@ exports.createAppointment = async (req, res) => {
 
     const dailyLimit = selectedItem.operatingHours.shifts[shift].dailyLimit;
 
-    // Contagem de agendamentos existentes no turno especificado
     const existingAppointments = await HealthAppointment.countDocuments({
       "city.id": city.id,
       "unit.id": unit.id,
@@ -66,16 +65,30 @@ exports.createAppointment = async (req, res) => {
       specialty,
       exam,
       date,
-      shift, // 🔹 Salvando o turno
+      shift,
       status: "pendente",
     });
 
     await newAppointment.save();
 
+    const userDoc = await User.findById(user);
+    console.log({ userDoc });
+    if (!userDoc) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    if (type === "consulta") {
+      userDoc.medicalAppointments.push(newAppointment._id);
+    } else if (type === "exame") {
+      userDoc.examAppointments.push(newAppointment._id);
+    }
+
+    await userDoc.save();
+
     res.status(201).json({
       message: "Agendamento criado com sucesso!",
       appointment: newAppointment,
-      remainingSlots: dailyLimit - existingAppointments - 1, // 🔹 Agora desconta do turno correto
+      remainingSlots: dailyLimit - existingAppointments - 1,
     });
   } catch (error) {
     console.error("Erro ao criar agendamento:", error);
@@ -83,7 +96,6 @@ exports.createAppointment = async (req, res) => {
   }
 };
 
-// Buscar todos os agendamentos
 exports.getAllAppointments = async (req, res) => {
   try {
     const appointments = await HealthAppointment.find();
@@ -94,7 +106,6 @@ exports.getAllAppointments = async (req, res) => {
   }
 };
 
-// Buscar agendamentos por cidade
 exports.getAppointmentsByCity = async (req, res) => {
   try {
     const { cityId } = req.params;
@@ -114,7 +125,6 @@ exports.getAppointmentsByCity = async (req, res) => {
   }
 };
 
-// Atualizar status de um agendamento (exemplo: confirmar ou cancelar)
 exports.updateAppointmentStatus = async (req, res) => {
   try {
     const { id } = req.params;
@@ -144,7 +154,6 @@ exports.updateAppointmentStatus = async (req, res) => {
   }
 };
 
-// Deletar agendamento
 exports.deleteAppointment = async (req, res) => {
   try {
     const { id } = req.params;
