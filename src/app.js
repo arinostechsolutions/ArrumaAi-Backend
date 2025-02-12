@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 const reportRoutes = require("./routes/reportRoutes");
 const cityRoutes = require("./routes/cityRoutes");
 const healthAppointmentRoutes = require("./routes/healthAppointmentRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 dotenv.config();
 connectDB();
@@ -21,7 +22,8 @@ app.use(cors());
 // Rotas
 app.use("/api/reports", reportRoutes);
 app.use("/api/cities", cityRoutes);
-app.use("api/health", healthAppointmentRoutes);
+app.use("/api/health", healthAppointmentRoutes);
+app.use("/api/user", userRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
