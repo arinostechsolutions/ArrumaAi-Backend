@@ -118,7 +118,6 @@ exports.deleteReport = async (req, res) => {
   }
 };
 
-// Buscar todas as denúncias de uma cidade
 exports.getReportsByCity = async (req, res) => {
   try {
     const { cityId } = req.params;
@@ -133,12 +132,6 @@ exports.getReportsByCity = async (req, res) => {
 
     if (!cityData) {
       return res.status(404).json({ message: "Cidade não encontrada." });
-    }
-
-    if (!cityData.modules.reports.enabled) {
-      return res.status(403).json({
-        message: "Este município não possui o módulo de denúncias ativo.",
-      });
     }
 
     res.status(200).json(cityData.modules.reports.reportList);

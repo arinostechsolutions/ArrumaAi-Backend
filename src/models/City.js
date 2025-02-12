@@ -17,12 +17,26 @@ const CitySchema = new mongoose.Schema(
               {
                 id: { type: String, required: true },
                 label: { type: String, required: true },
+                operatingHours: {
+                  availableDays: [{ type: String, required: true }],
+                  shifts: {
+                    morning: { dailyLimit: { type: Number, default: 0 } },
+                    afternoon: { dailyLimit: { type: Number, default: 0 } },
+                  },
+                },
               },
             ],
             availableExams: [
               {
                 id: { type: String, required: true },
                 label: { type: String, required: true },
+                operatingHours: {
+                  availableDays: [{ type: String, required: true }],
+                  shifts: {
+                    morning: { dailyLimit: { type: Number, default: 0 } },
+                    afternoon: { dailyLimit: { type: Number, default: 0 } },
+                  },
+                },
               },
             ],
           },
