@@ -1,6 +1,12 @@
 # Node.js
 node_modules/
+
+# Environment files
 .env
+.env.development
+.env.staging
+.env.production
+.env.local
 
 # Logs
 logs

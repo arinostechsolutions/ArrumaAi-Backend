@@ -12,14 +12,17 @@ exports.createReport = async (req, res) => {
       city,
       referencia,
       rua,
+      bairro,
       status,
-      description,
+      user,
     } = req.body;
 
-    if (!reportType || !address || !city || !status) {
+    console.log("📦 Dados da denúncia recebidos:", JSON.stringify(req.body, null, 2));
+
+    if (!reportType || !address || !city || !status || !user?.userId) {
       return res
         .status(400)
-        .json({ message: "Todos os campos são obrigatórios." });
+        .json({ message: "Todos os campos obrigatórios devem ser preenchidos (incluindo usuário)." });
     }
 
     // Buscar a cidade associada à denúncia
@@ -37,9 +40,22 @@ exports.createReport = async (req, res) => {
       imageUrl,
       referencia,
       rua,
+      bairro,
       status,
-      description,
+      user: {
+        userId: user.userId,
+        name: user.name,
+        cpf: user.cpf,
+        phone: user.phone || null,
+      },
+      declarationAccepted: {
+        accepted: true,
+        acceptedAt: new Date(),
+        ipAddress: req.ip || req.connection.remoteAddress,
+      },
     });
+
+    console.log("✅ Nova denúncia:", JSON.stringify(newReport, null, 2));
 
     await newReport.save();
 
@@ -64,6 +80,29 @@ exports.getAllReports = async (req, res) => {
     res.status(200).json(reports);
   } catch (error) {
     console.error("Erro ao listar denúncias:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+// Buscar denúncias por usuário
+exports.getReportsByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "ID de usuário inválido." });
+    }
+
+    console.log("🔎 Buscando denúncias do usuário:", userId);
+
+    const reports = await Report.find({ "user.userId": userId })
+      .sort({ createdAt: -1 }); // Mais recentes primeiro
+
+    console.log(`✅ Encontradas ${reports.length} denúncias do usuário`);
+
+    res.status(200).json(reports);
+  } catch (error) {
+    console.error("Erro ao buscar denúncias do usuário:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 };

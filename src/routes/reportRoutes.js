@@ -5,6 +5,7 @@ const {
   getReportById,
   deleteReport,
   getReportsByCity,
+  getReportsByUser,
 } = require("../controllers/reportController");
 
 const { paginationMiddleware } = require("../middlewares/paginationMiddleware");
@@ -17,6 +18,7 @@ router.post("/createReport", validateReport, rateLimitMiddleware, createReport);
 router.get("/getAllReports", paginationMiddleware, getAllReports);
 router.get("/getReportById/:id", getReportById);
 router.get("/getReportsByCity/:cityId", paginationMiddleware, getReportsByCity);
+router.get("/getReportsByUser/:userId", getReportsByUser);
 router.delete("/deleteReport/:id", deleteReport);
 
 module.exports = router;
