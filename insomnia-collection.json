@@ -1,0 +1,470 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2025-11-05T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v2023.5.8",
+  "resources": [
+    {
+      "_id": "wrk_resolveai",
+      "_type": "workspace",
+      "name": "ResolveAi API",
+      "description": "Collection completa da API ResolveAi"
+    },
+    {
+      "_id": "env_base",
+      "_type": "environment",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:3000/api"
+      },
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "env_dev",
+      "_type": "environment",
+      "name": "Development",
+      "data": {
+        "base_url": "http://localhost:3000/api"
+      },
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "env_prod",
+      "_type": "environment",
+      "name": "Production",
+      "data": {
+        "base_url": "https://sua-url.railway.app/api"
+      },
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "fld_cities",
+      "_type": "request_group",
+      "name": "Cities",
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "req_cities_getAll",
+      "_type": "request",
+      "name": "Get All Cities",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cities/getAllCities",
+      "parentId": "fld_cities",
+      "parameters": [
+        {
+          "name": "page",
+          "value": "1",
+          "disabled": true
+        },
+        {
+          "name": "limit",
+          "value": "10",
+          "disabled": true
+        }
+      ]
+    },
+    {
+      "_id": "req_cities_getById",
+      "_type": "request",
+      "name": "Get City by ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/cities/getCityById/CITY_ID_HERE",
+      "parentId": "fld_cities"
+    },
+    {
+      "_id": "req_cities_create",
+      "_type": "request",
+      "name": "Create City",
+      "method": "POST",
+      "url": "{{ _.base_url }}/cities/createCity",
+      "parentId": "fld_cities",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"id\": \"araruama-rj\",\n  \"label\": \"Araruama\",\n  \"bairros\": [\"Centro\", \"Parque Hotel\", \"Praia Seca\"],\n  \"menu\": [\n    {\n      \"id\": \"reports\",\n      \"label\": \"Denúncias\",\n      \"bgColor\": \"#FF6B6B\",\n      \"iconName\": \"alert-circle\"\n    },\n    {\n      \"id\": \"health\",\n      \"label\": \"Saúde\",\n      \"bgColor\": \"#4ECDC4\",\n      \"iconName\": \"medical\"\n    }\n  ],\n  \"modules\": {\n    \"reports\": {\n      \"reportTypes\": [\n        {\n          \"id\": \"buraco-rua\",\n          \"label\": \"Buraco na Rua\"\n        },\n        {\n          \"id\": \"iluminacao\",\n          \"label\": \"Iluminação Pública\"\n        },\n        {\n          \"id\": \"lixo\",\n          \"label\": \"Lixo Acumulado\"\n        }\n      ],\n      \"reportList\": []\n    },\n    \"healthAppointments\": {\n      \"healthServices\": []\n    },\n    \"iptu\": {}\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_cities_updateReportTypes",
+      "_type": "request",
+      "name": "Update Report Types",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/cities/updateReportTypesByCity/CITY_ID_HERE",
+      "parentId": "fld_cities",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reportTypes\": [\n    {\n      \"name\": \"Buraco na Rua\",\n      \"icon\": \"road\"\n    },\n    {\n      \"name\": \"Poda de Árvore\",\n      \"icon\": \"tree\"\n    }\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_cities_delete",
+      "_type": "request",
+      "name": "Delete City",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/cities/deleteCity/CITY_ID_HERE",
+      "parentId": "fld_cities"
+    },
+    {
+      "_id": "fld_reports",
+      "_type": "request_group",
+      "name": "Reports",
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "req_reports_getAll",
+      "_type": "request",
+      "name": "Get All Reports",
+      "method": "GET",
+      "url": "{{ _.base_url }}/reports/getAllReports",
+      "parentId": "fld_reports",
+      "parameters": [
+        {
+          "name": "page",
+          "value": "1",
+          "disabled": true
+        },
+        {
+          "name": "limit",
+          "value": "10",
+          "disabled": true
+        }
+      ]
+    },
+    {
+      "_id": "req_reports_getById",
+      "_type": "request",
+      "name": "Get Report by ID",
+      "method": "GET",
+      "url": "{{ _.base_url }}/reports/getReportById/REPORT_ID_HERE",
+      "parentId": "fld_reports"
+    },
+    {
+      "_id": "req_reports_getByCity",
+      "_type": "request",
+      "name": "Get Reports by City",
+      "method": "GET",
+      "url": "{{ _.base_url }}/reports/getReportsByCity/CITY_ID_HERE",
+      "parentId": "fld_reports",
+      "parameters": [
+        {
+          "name": "page",
+          "value": "1",
+          "disabled": true
+        },
+        {
+          "name": "limit",
+          "value": "10",
+          "disabled": true
+        }
+      ]
+    },
+    {
+      "_id": "req_reports_create",
+      "_type": "request",
+      "name": "Create Report",
+      "method": "POST",
+      "url": "{{ _.base_url }}/reports/createReport",
+      "parentId": "fld_reports",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reportType\": \"buraco_rua\",\n  \"address\": \"Araruama-RJ, Centro, Rua Principal - Próximo ao mercado\",\n  \"imageUrl\": \"https://res.cloudinary.com/durusveju/image/upload/v1234567890/report_image.jpg\",\n  \"rua\": \"Rua Principal\",\n  \"bairro\": \"Centro\",\n  \"referencia\": \"Próximo ao mercado\",\n  \"status\": \"nao_iniciado\",\n  \"city\": {\n    \"id\": \"araruama-rj\",\n    \"label\": \"Araruama-RJ\"\n  },\n  \"user\": {\n    \"userId\": \"USER_ID_HERE\",\n    \"name\": \"João Silva\",\n    \"cpf\": \"12345678900\",\n    \"phone\": \"22999999999\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_reports_delete",
+      "_type": "request",
+      "name": "Delete Report",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/reports/deleteReport/REPORT_ID_HERE",
+      "parentId": "fld_reports"
+    },
+    {
+      "_id": "fld_health",
+      "_type": "request_group",
+      "name": "Health Appointments",
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "req_health_getAll",
+      "_type": "request",
+      "name": "Get All Appointments",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health/getAllAppointments",
+      "parentId": "fld_health",
+      "parameters": [
+        {
+          "name": "page",
+          "value": "1",
+          "disabled": true
+        },
+        {
+          "name": "limit",
+          "value": "10",
+          "disabled": true
+        }
+      ]
+    },
+    {
+      "_id": "req_health_getByCity",
+      "_type": "request",
+      "name": "Get Appointments by City",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health/getAppointmentsByCity/CITY_ID_HERE",
+      "parentId": "fld_health"
+    },
+    {
+      "_id": "req_health_getRemaining",
+      "_type": "request",
+      "name": "Get Remaining Appointments",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health/getRemainingAppointments",
+      "parentId": "fld_health"
+    },
+    {
+      "_id": "req_health_getCount",
+      "_type": "request",
+      "name": "Get Appointments Count by City",
+      "method": "GET",
+      "url": "{{ _.base_url }}/health/getAppointmentsCountByCity/CITY_ID_HERE",
+      "parentId": "fld_health"
+    },
+    {
+      "_id": "req_health_create",
+      "_type": "request",
+      "name": "Create Appointment",
+      "method": "POST",
+      "url": "{{ _.base_url }}/health/createAppointment",
+      "parentId": "fld_health",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cityId\": \"CITY_ID_HERE\",\n  \"userCpf\": \"12345678900\",\n  \"userName\": \"João Silva\",\n  \"appointmentType\": \"Consulta\",\n  \"specialtyOrExam\": \"Clínico Geral\",\n  \"healthUnit\": \"UBS Central\",\n  \"date\": \"2025-11-10T10:00:00.000Z\",\n  \"status\": \"scheduled\"\n}"
+      }
+    },
+    {
+      "_id": "req_health_updateStatus",
+      "_type": "request",
+      "name": "Update Appointment Status",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/health/updateAppointmentStatus/APPOINTMENT_ID_HERE",
+      "parentId": "fld_health",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"completed\"\n}"
+      }
+    },
+    {
+      "_id": "req_health_delete",
+      "_type": "request",
+      "name": "Delete Appointment",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/health/deleteAppointment/APPOINTMENT_ID_HERE",
+      "parentId": "fld_health"
+    },
+    {
+      "_id": "fld_users",
+      "_type": "request_group",
+      "name": "Users",
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "req_users_checkByCPF",
+      "_type": "request",
+      "name": "Check User by CPF",
+      "method": "GET",
+      "url": "{{ _.base_url }}/user/checkUserByCPF",
+      "parentId": "fld_users",
+      "parameters": [
+        {
+          "name": "cpf",
+          "value": "12345678900"
+        }
+      ]
+    },
+    {
+      "_id": "req_users_register",
+      "_type": "request",
+      "name": "Register User",
+      "method": "POST",
+      "url": "{{ _.base_url }}/user/registerUser",
+      "parentId": "fld_users",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"cityId\": \"araruama-rj\",\n  \"cpf\": \"12345678900\",\n  \"name\": \"João Silva\",\n  \"email\": \"joao@email.com\",\n  \"phone\": \"21999999999\",\n  \"birthDate\": \"1990-01-01\",\n  \"address\": {\n    \"bairro\": \"Centro\",\n    \"rua\": \"Rua Principal\",\n    \"numero\": \"123\",\n    \"complemento\": \"Apto 201\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_users_update",
+      "_type": "request",
+      "name": "Update User",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/user/updateUser/12345678900",
+      "parentId": "fld_users",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"João Silva Santos\",\n  \"email\": \"joao.novo@email.com\",\n  \"phone\": \"11988888888\"\n}"
+      }
+    },
+    {
+      "_id": "req_users_updateProfileImage",
+      "_type": "request",
+      "name": "Update Profile Image",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/user/updateProfileImage/USER_ID_HERE",
+      "parentId": "fld_users",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"profileImage\": \"https://res.cloudinary.com/durusveju/image/upload/v1234567890/profile_user123.jpg\"\n}"
+      }
+    },
+    {
+      "_id": "req_users_delete",
+      "_type": "request",
+      "name": "Delete User",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/user/deleteUser/12345678900",
+      "parentId": "fld_users"
+    },
+    {
+      "_id": "req_users_hidePost",
+      "_type": "request",
+      "name": "Hide Post",
+      "method": "POST",
+      "url": "{{ _.base_url }}/user/hidePost",
+      "parentId": "fld_users",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"reportId\": \"REPORT_ID_HERE\"\n}"
+      }
+    },
+    {
+      "_id": "req_users_unhidePost",
+      "_type": "request",
+      "name": "Unhide Post",
+      "method": "POST",
+      "url": "{{ _.base_url }}/user/unhidePost",
+      "parentId": "fld_users",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"reportId\": \"REPORT_ID_HERE\"\n}"
+      }
+    },
+    {
+      "_id": "fld_content_report",
+      "_type": "request_group",
+      "name": "Content Reports (Denúncias de Conteúdo)",
+      "parentId": "wrk_resolveai"
+    },
+    {
+      "_id": "req_content_report_create",
+      "_type": "request",
+      "name": "Create Content Report",
+      "method": "POST",
+      "url": "{{ _.base_url }}/content-report/create",
+      "parentId": "fld_content_report",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"reportId\": \"REPORT_ID_HERE\",\n  \"reportedBy\": {\n    \"userId\": \"USER_ID_HERE\",\n    \"name\": \"João Silva\",\n    \"cpf\": \"12345678900\"\n  },\n  \"reason\": \"conteudo_improprio\",\n  \"details\": \"Descrição opcional do problema\"\n}"
+      }
+    },
+    {
+      "_id": "req_content_report_pending",
+      "_type": "request",
+      "name": "Get Pending Reports",
+      "method": "GET",
+      "url": "{{ _.base_url }}/content-report/pending?page=1&limit=20",
+      "parentId": "fld_content_report"
+    },
+    {
+      "_id": "req_content_report_count",
+      "_type": "request",
+      "name": "Get Report Count",
+      "method": "GET",
+      "url": "{{ _.base_url }}/content-report/by-report/REPORT_ID_HERE",
+      "parentId": "fld_content_report"
+    },
+    {
+      "_id": "req_content_report_review",
+      "_type": "request",
+      "name": "Review Content Report (Admin)",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/content-report/review/CONTENT_REPORT_ID_HERE",
+      "parentId": "fld_content_report",
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"status\": \"procedente\",\n  \"action\": \"remocao_conteudo\",\n  \"moderatorNotes\": \"Conteúdo removido por violar diretrizes da comunidade.\"\n}"
+      }
+    }
+  ]
+}
+

@@ -20,9 +20,62 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    email: {
+      type: String,
+      required: false,
+    },
+    profileImage: {
+      type: String,
+      required: false,
+      default: null,
+    },
     susCard: {
       type: String,
       sparse: true,
+    },
+    address: {
+      bairro: {
+        type: String,
+        required: true,
+      },
+      rua: {
+        type: String,
+        required: false,
+      },
+      numero: {
+        type: String,
+        required: false,
+      },
+      complemento: {
+        type: String,
+        required: false,
+      },
+    },
+    lgpdConsent: {
+      accepted: {
+        type: Boolean,
+        required: true,
+        default: false,
+      },
+      acceptedAt: {
+        type: Date,
+      },
+      ipAddress: {
+        type: String,
+      },
+    },
+    termsAccepted: {
+      accepted: {
+        type: Boolean,
+        required: true,
+        default: false,
+      },
+      acceptedAt: {
+        type: Date,
+      },
+      ipAddress: {
+        type: String,
+      },
     },
     city: {
       type: mongoose.Schema.Types.ObjectId,
@@ -46,6 +99,19 @@ const UserSchema = new mongoose.Schema(
         dateReceived: { type: Date, required: true },
       },
     ],
+    // Posts ocultos pelo usuário (não aparecem no feed)
+    hiddenPosts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Report",
+      },
+    ],
+    // 🔐 Permissões de administrador
+    isAdmin: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
   },
   { timestamps: true }
 );

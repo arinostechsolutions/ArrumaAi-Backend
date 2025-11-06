@@ -4,6 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/app.js",
+    "dev": "cross-env NODE_ENV=development node src/app.js",
+    "prod": "cross-env NODE_ENV=production node src/app.js",
+    "staging": "cross-env NODE_ENV=staging node src/app.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -19,5 +22,8 @@
     "express-rate-limit": "^7.5.0",
     "moment-timezone": "^0.5.47",
     "mongoose": "^8.9.6"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
   }
 }
