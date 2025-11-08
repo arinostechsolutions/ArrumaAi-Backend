@@ -6,6 +6,7 @@ const {
   deleteReport,
   getReportsByCity,
   getReportsByUser,
+  getReportsForMap,
 } = require("../controllers/reportController");
 
 const { paginationMiddleware } = require("../middlewares/paginationMiddleware");
@@ -19,6 +20,7 @@ router.get("/getAllReports", paginationMiddleware, getAllReports);
 router.get("/getReportById/:id", getReportById);
 router.get("/getReportsByCity/:cityId", paginationMiddleware, getReportsByCity);
 router.get("/getReportsByUser/:userId", getReportsByUser);
+router.get("/map/:cityId", getReportsForMap);
 router.delete("/deleteReport/:id", deleteReport);
 
 module.exports = router;

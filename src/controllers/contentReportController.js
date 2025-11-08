@@ -1,6 +1,9 @@
 const mongoose = require("mongoose");
 const ContentReport = require("../models/ContentReport");
 const Report = require("../models/Report");
+const City = require("../models/City");
+
+const AUTO_DELETE_THRESHOLD = 10;
 
 /**
  * POST /api/content-report/create
@@ -76,9 +79,54 @@ exports.createContentReport = async (req, res) => {
 
     console.log(`✅ Denúncia de conteúdo registrada: ${newContentReport._id}`);
 
+    // Conta denúncias válidas (excluindo improcedentes)
+    const activeReportCount = await ContentReport.countDocuments({
+      reportId,
+      status: { $ne: "improcedente" },
+    });
+
+    let autoDeleted = false;
+
+    if (activeReportCount >= AUTO_DELETE_THRESHOLD) {
+      console.log(`🚨 Report ${reportId} atingiu ${activeReportCount} denúncias. Removendo automaticamente.`);
+
+      // Remove a denúncia principal
+      const deletedReport = await Report.findByIdAndDelete(reportId);
+
+      if (deletedReport) {
+        // Remove da lista da cidade
+        await City.findOneAndUpdate(
+          { id: deletedReport.city.id },
+          { $pull: { "modules.reports.reportList": reportId } }
+        );
+
+        // Atualiza denúncias de conteúdo relacionadas
+        await ContentReport.updateMany(
+          { reportId },
+          {
+            $set: {
+              status: "resolvido",
+              action: "remocao_conteudo",
+              moderatorNotes:
+                "Removido automaticamente após exceder o limite de denúncias.",
+              reviewedAt: new Date(),
+            },
+          }
+        );
+
+        autoDeleted = true;
+      } else {
+        console.warn(`⚠️ Tentativa de remover report ${reportId}, mas ele já não existe.`);
+      }
+    }
+
     return res.status(201).json({
-      message: "Denúncia registrada com sucesso. Nossa equipe analisará em breve.",
+      message: autoDeleted
+        ? "Denúncia registrada. O conteúdo ultrapassou o limite e foi removido automaticamente."
+        : "Denúncia registrada com sucesso. Nossa equipe analisará em breve.",
       contentReportId: newContentReport._id,
+      reportCount: activeReportCount,
+      autoDeleted,
     });
 
   } catch (error) {

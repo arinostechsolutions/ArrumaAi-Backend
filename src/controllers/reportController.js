@@ -15,6 +15,7 @@ exports.createReport = async (req, res) => {
       bairro,
       status,
       user,
+      location,
     } = req.body;
 
     console.log("📦 Dados da denúncia recebidos:", JSON.stringify(req.body, null, 2));
@@ -30,6 +31,26 @@ exports.createReport = async (req, res) => {
 
     if (!cityData) {
       return res.status(404).json({ message: "Cidade não encontrada." });
+    }
+
+    let geoLocation = null;
+    if (location && typeof location.lat === "number" && typeof location.lng === "number") {
+      const { lat, lng, accuracy, collectedAt } = location;
+      if (
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180
+      ) {
+        geoLocation = {
+          type: "Point",
+          coordinates: [lng, lat],
+          accuracy: typeof accuracy === "number" ? accuracy : undefined,
+          collectedAt: collectedAt ? new Date(collectedAt) : new Date(),
+        };
+      } else {
+        return res.status(400).json({ message: "Coordenadas inválidas fornecidas." });
+      }
     }
 
     // Criar o novo relatório
@@ -54,6 +75,10 @@ exports.createReport = async (req, res) => {
         ipAddress: req.ip || req.connection.remoteAddress,
       },
     });
+
+    if (geoLocation) {
+      newReport.location = geoLocation;
+    }
 
     console.log("✅ Nova denúncia:", JSON.stringify(newReport, null, 2));
 
@@ -177,5 +202,61 @@ exports.getReportsByCity = async (req, res) => {
   } catch (error) {
     console.error("Erro ao buscar denúncias por cidade:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+exports.getReportsForMap = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+
+    if (!cityId) {
+      return res.status(400).json({ message: "ID da cidade é obrigatório." });
+    }
+
+    const reports = await Report.find({
+      "city.id": cityId,
+      location: { $exists: true, $ne: null },
+      "location.coordinates": { $exists: true, $ne: null },
+    })
+      .select(
+        "reportType address status bairro rua referencia location imageUrl createdAt updatedAt"
+      )
+      .sort({ createdAt: -1 });
+
+    const formatted = reports
+      .filter(
+        (report) =>
+          report.location &&
+          Array.isArray(report.location.coordinates) &&
+          report.location.coordinates.length === 2
+      )
+      .map((report) => ({
+        _id: report._id,
+        reportType: report.reportType,
+        address: report.address,
+        status: report.status,
+        bairro: report.bairro,
+        rua: report.rua,
+        referencia: report.referencia,
+        imageUrl: report.imageUrl,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+        location: {
+          lat: report.location.coordinates[1],
+          lng: report.location.coordinates[0],
+          accuracy: report.location.accuracy || null,
+        },
+      }));
+
+    return res.status(200).json({
+      cityId,
+      total: formatted.length,
+      reports: formatted,
+    });
+  } catch (error) {
+    console.error("Erro ao buscar denúncias para o mapa:", error);
+    return res
+      .status(500)
+      .json({ message: "Erro interno do servidor ao carregar o mapa." });
   }
 };
