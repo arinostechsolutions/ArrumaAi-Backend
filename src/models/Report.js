@@ -38,6 +38,29 @@ const ReportSchema = new mongoose.Schema(
         type: String,
       },
     },
+    location: {
+      type: {
+        type: String,
+        enum: ["Point"],
+        default: "Point",
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        validate: {
+          validator: function (value) {
+            if (!value || value.length === 0) return true;
+            return value.length === 2;
+          },
+          message: "Coordenadas inválidas. Use [longitude, latitude].",
+        },
+      },
+      accuracy: {
+        type: Number,
+      },
+      collectedAt: {
+        type: Date,
+      },
+    },
     // 🔥 MÉTRICAS DO FEED (Algoritmo estilo Instagram)
     likes: [{
       userId: { 
@@ -90,5 +113,7 @@ const ReportSchema = new mongoose.Schema(
   },
   { timestamps: true, collection: "reports" }
 );
+
+ReportSchema.index({ location: "2dsphere" });
 
 module.exports = mongoose.model("Report", ReportSchema);
