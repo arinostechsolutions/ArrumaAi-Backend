@@ -33,28 +33,39 @@ exports.createReport = async (req, res) => {
       return res.status(404).json({ message: "Cidade não encontrada." });
     }
 
+    // Valida e prepara a localização geográfica (opcional)
     let geoLocation = null;
-    if (location && typeof location.lat === "number" && typeof location.lng === "number") {
-      const { lat, lng, accuracy, collectedAt } = location;
-      if (
-        lat >= -90 &&
-        lat <= 90 &&
-        lng >= -180 &&
-        lng <= 180
-      ) {
-        geoLocation = {
-          type: "Point",
-          coordinates: [lng, lat],
-          accuracy: typeof accuracy === "number" ? accuracy : undefined,
-          collectedAt: collectedAt ? new Date(collectedAt) : new Date(),
-        };
+    if (location && location.lat !== undefined && location.lng !== undefined) {
+      const lat = parseFloat(location.lat);
+      const lng = parseFloat(location.lng);
+      
+      // Verifica se são números válidos
+      if (!isNaN(lat) && !isNaN(lng)) {
+        // Valida o range das coordenadas
+        if (
+          lat >= -90 &&
+          lat <= 90 &&
+          lng >= -180 &&
+          lng <= 180
+        ) {
+          geoLocation = {
+            type: "Point",
+            coordinates: [lng, lat], // MongoDB usa [longitude, latitude]
+            accuracy: typeof location.accuracy === "number" ? location.accuracy : undefined,
+            collectedAt: location.collectedAt ? new Date(location.collectedAt) : new Date(),
+          };
+        } else {
+          console.warn("⚠️ Coordenadas fora do range válido:", { lat, lng });
+          // Não retorna erro, apenas ignora a localização inválida
+        }
       } else {
-        return res.status(400).json({ message: "Coordenadas inválidas fornecidas." });
+        console.warn("⚠️ Coordenadas inválidas (não são números):", location);
+        // Não retorna erro, apenas ignora a localização inválida
       }
     }
 
     // Criar o novo relatório
-    const newReport = new Report({
+    const reportData = {
       city,
       reportType,
       address,
@@ -74,11 +85,14 @@ exports.createReport = async (req, res) => {
         acceptedAt: new Date(),
         ipAddress: req.ip || req.connection.remoteAddress,
       },
-    });
+    };
 
-    if (geoLocation) {
-      newReport.location = geoLocation;
+    // Só adiciona location se houver coordenadas válidas
+    if (geoLocation && geoLocation.coordinates && geoLocation.coordinates.length === 2) {
+      reportData.location = geoLocation;
     }
+
+    const newReport = new Report(reportData);
 
     console.log("✅ Nova denúncia:", JSON.stringify(newReport, null, 2));
 
@@ -141,13 +155,30 @@ exports.getReportById = async (req, res) => {
       return res.status(400).json({ message: "ID inválido." });
     }
 
-    const report = await Report.findById(id);
+    // Busca o report completo com todos os dados populados
+    const report = await Report.findById(id)
+      .populate("user.userId", "name profileImage cpf phone"); // Popula dados completos do usuário
 
     if (!report) {
       return res.status(404).json({ message: "Denúncia não encontrada." });
     }
 
-    res.status(200).json(report);
+    // Formata a resposta para incluir métricas de engajamento
+    const formattedReport = {
+      ...report.toObject(),
+      likesCount: report.likes ? report.likes.length : 0,
+      viewsCount: report.views ? report.views.length : 0,
+      sharesCount: report.shares ? report.shares.length : 0,
+      // Formata location se existir
+      location: report.location && report.location.coordinates ? {
+        lat: report.location.coordinates[1],
+        lng: report.location.coordinates[0],
+        accuracy: report.location.accuracy || null,
+        collectedAt: report.location.collectedAt || null,
+      } : null,
+    };
+
+    res.status(200).json(formattedReport);
   } catch (error) {
     console.error("Erro ao buscar denúncia por ID:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -213,14 +244,13 @@ exports.getReportsForMap = async (req, res) => {
       return res.status(400).json({ message: "ID da cidade é obrigatório." });
     }
 
+    // Busca todos os reports com localização válida, incluindo todos os campos necessários
     const reports = await Report.find({
       "city.id": cityId,
       location: { $exists: true, $ne: null },
       "location.coordinates": { $exists: true, $ne: null },
     })
-      .select(
-        "reportType address status bairro rua referencia location imageUrl createdAt updatedAt"
-      )
+      .populate("user.userId", "name profileImage") // Popula dados do usuário para a modal
       .sort({ createdAt: -1 });
 
     const formatted = reports
@@ -230,23 +260,46 @@ exports.getReportsForMap = async (req, res) => {
           Array.isArray(report.location.coordinates) &&
           report.location.coordinates.length === 2
       )
-      .map((report) => ({
-        _id: report._id,
-        reportType: report.reportType,
-        address: report.address,
-        status: report.status,
-        bairro: report.bairro,
-        rua: report.rua,
-        referencia: report.referencia,
-        imageUrl: report.imageUrl,
-        createdAt: report.createdAt,
-        updatedAt: report.updatedAt,
-        location: {
-          lat: report.location.coordinates[1],
-          lng: report.location.coordinates[0],
-          accuracy: report.location.accuracy || null,
-        },
-      }));
+      .map((report) => {
+        // Retorna todos os dados necessários para a modal funcionar corretamente
+        const formattedReport = {
+          _id: report._id,
+          reportType: report.reportType,
+          address: report.address,
+          status: report.status,
+          bairro: report.bairro,
+          rua: report.rua,
+          referencia: report.referencia,
+          imageUrl: report.imageUrl,
+          city: report.city,
+          user: report.user,
+          declarationAccepted: report.declarationAccepted,
+          createdAt: report.createdAt,
+          updatedAt: report.updatedAt,
+          // Métricas de engajamento (necessárias para a modal)
+          likesCount: report.likes ? report.likes.length : 0,
+          viewsCount: report.views ? report.views.length : 0,
+          sharesCount: report.shares ? report.shares.length : 0,
+          engagementScore: report.engagementScore || 0,
+          // Localização formatada para o mapa
+          location: {
+            lat: report.location.coordinates[1],
+            lng: report.location.coordinates[0],
+            accuracy: report.location.accuracy || null,
+            collectedAt: report.location.collectedAt || null,
+          },
+        };
+
+        // Adiciona arrays de likes, views e shares se necessário (para verificar se usuário já interagiu)
+        if (report.likes && report.likes.length > 0) {
+          formattedReport.likes = report.likes.map(like => ({
+            userId: like.userId,
+            likedAt: like.likedAt,
+          }));
+        }
+
+        return formattedReport;
+      });
 
     return res.status(200).json({
       cityId,

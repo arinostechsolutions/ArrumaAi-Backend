@@ -42,13 +42,16 @@ const ReportSchema = new mongoose.Schema(
       type: {
         type: String,
         enum: ["Point"],
-        default: "Point",
+        // Não tem default - só será definido quando houver coordenadas válidas
       },
       coordinates: {
         type: [Number], // [longitude, latitude]
+        required: false,
         validate: {
           validator: function (value) {
+            // Se não há valor, é válido (campo opcional)
             if (!value || value.length === 0) return true;
+            // Se há valor, deve ter exatamente 2 elementos
             return value.length === 2;
           },
           message: "Coordenadas inválidas. Use [longitude, latitude].",
@@ -114,6 +117,20 @@ const ReportSchema = new mongoose.Schema(
   { timestamps: true, collection: "reports" }
 );
 
-ReportSchema.index({ location: "2dsphere" });
+// Índice geoespacial apenas se location existir e tiver coordenadas válidas
+ReportSchema.index({ location: "2dsphere" }, { sparse: true });
+
+// Middleware pré-save: remove location se não tiver coordenadas válidas
+ReportSchema.pre("save", function (next) {
+  // Se location existe mas não tem coordenadas válidas, remove o campo
+  if (this.location && (!this.location.coordinates || this.location.coordinates.length !== 2)) {
+    this.location = undefined;
+  }
+  // Se location existe mas não tem type, define como "Point"
+  if (this.location && this.location.coordinates && this.location.coordinates.length === 2 && !this.location.type) {
+    this.location.type = "Point";
+  }
+  next();
+});
 
 module.exports = mongoose.model("Report", ReportSchema);
