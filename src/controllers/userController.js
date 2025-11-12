@@ -52,14 +52,20 @@ exports.registerUser = async (req, res) => {
     console.log("📦 Dados recebidos no backend:", JSON.stringify(req.body, null, 2));
     console.log("🏠 Endereço recebido:", address);
 
-    if (!cityId || !cpf || !name || !birthDate || !phone || !address?.bairro) {
+    const bairro =
+      address?.bairro ||
+      address?.neighborhood ||
+      address?.district ||
+      address?.bairro?.trim?.();
+
+    if (!cityId || !cpf || !name || !birthDate || !phone || !bairro) {
       console.log("⚠️ Campos obrigatórios faltando:", {
         cityId,
         cpf,
         name,
         birthDate,
         phone,
-        bairro: address?.bairro,
+        bairro,
       });
       return res
         .status(400)
@@ -102,7 +108,7 @@ exports.registerUser = async (req, res) => {
       phone: formattedPhone,
       email: email || null,
       address: {
-        bairro: address.bairro,
+        bairro,
         rua: address.rua || null,
         numero: address.numero || null,
         complemento: address.complemento || null,
@@ -127,7 +133,7 @@ exports.registerUser = async (req, res) => {
       birthDate: formattedBirthDate,
       phone: formattedPhone,
       address: {
-        bairro: address.bairro,
+        bairro,
         rua: address.rua,
         numero: address.numero,
         complemento: address.complemento,

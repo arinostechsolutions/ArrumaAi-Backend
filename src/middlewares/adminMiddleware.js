@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { verifyToken } = require("../utils/jwt");
 
 /**
  * Middleware para verificar se o usuário é admin
@@ -6,8 +7,47 @@ const User = require("../models/User");
  */
 exports.isAdmin = async (req, res, next) => {
   try {
-    // Busca userId do body, params ou query (dependendo da requisição)
-    const userId = req.body.adminUserId || req.params.adminUserId || req.query.adminUserId;
+    const authHeader =
+      req.headers.authorization || req.headers.Authorization;
+    if (authHeader && typeof authHeader === "string" && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.replace(/Bearer\s+/i, "").trim();
+      const decoded = verifyToken(token);
+
+      if (!decoded) {
+        return res.status(401).json({
+          message: "Token inválido ou expirado.",
+        });
+      }
+
+      const user = await User.findById(decoded.userId);
+
+      if (!user || !user.isAdmin) {
+        return res.status(403).json({
+          message: "Acesso negado. Usuário não é administrador.",
+        });
+      }
+
+      const allowedCities = Array.isArray(user.adminCities)
+        ? user.adminCities.filter((city) => typeof city === "string" && city.trim() !== "")
+        : [];
+
+      req.admin = {
+        userId: user._id,
+        name: user.name,
+        cpf: user.cpf,
+        allowedCities,
+        isSuperAdmin: allowedCities.length === 0,
+      };
+
+      return next();
+    }
+
+    // Busca userId do header (preferencial), body, params ou query
+    const userId =
+      req.headers["x-admin-user-id"] ||
+      req.body.adminUserId ||
+      req.params.adminUserId ||
+      req.query.adminUserId;
 
     if (!userId) {
       return res.status(401).json({
@@ -32,13 +72,23 @@ exports.isAdmin = async (req, res, next) => {
       });
     }
 
-    console.log(`✅ Acesso admin concedido - User: ${userId} (${user.name})`);
+    const allowedCities = Array.isArray(user.adminCities)
+      ? user.adminCities.filter((city) => typeof city === "string" && city.trim() !== "")
+      : [];
+
+    console.log(
+      `✅ Acesso admin concedido - User: ${userId} (${user.name}) - Cidades: ${
+        allowedCities.length > 0 ? allowedCities.join(", ") : "todas"
+      }`,
+    );
     
     // Adiciona informações do admin ao request para uso posterior
     req.admin = {
       userId: user._id,
       name: user.name,
       cpf: user.cpf,
+      allowedCities,
+      isSuperAdmin: allowedCities.length === 0,
     };
 
     next();

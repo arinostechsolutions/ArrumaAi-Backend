@@ -1,8 +1,134 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const Report = require("../models/Report");
 const ContentReport = require("../models/ContentReport");
 const City = require("../models/City");
+
+exports.createAdminUser = async (req, res) => {
+  try {
+    if (!req.admin?.isSuperAdmin) {
+      return res.status(403).json({
+        message: "Apenas administradores globais podem criar novos acessos.",
+      });
+    }
+
+    const {
+      name,
+      email,
+      cpf,
+      phone,
+      birthDate,
+      address,
+      password,
+      adminCities = [],
+      isSuperAdmin = false,
+    } = req.body;
+
+    const superAdminFlag =
+      isSuperAdmin === true ||
+      isSuperAdmin === "true" ||
+      isSuperAdmin === 1 ||
+      isSuperAdmin === "1";
+
+    if (!name || !password || (!email && !cpf)) {
+      return res.status(400).json({
+        message: "Campos obrigatórios: name, password e email ou cpf.",
+      });
+    }
+
+    if (!phone || !birthDate || !address?.bairro) {
+      return res.status(400).json({
+        message:
+          "Informe telefone, data de nascimento e bairro para cadastro do administrador.",
+      });
+    }
+
+    const sanitizedCpf = cpf ? cpf.replace(/\D/g, "") : null;
+    const sanitizedPhone = phone.replace(/\D/g, "");
+    const normalizedEmail = email ? email.toLowerCase() : null;
+
+    const existingUser = await User.findOne({
+      $or: [
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ...(sanitizedCpf ? [{ cpf: sanitizedCpf }] : []),
+      ],
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        message: "Já existe um usuário com este e-mail ou CPF.",
+      });
+    }
+
+    const parsedBirthDate = new Date(birthDate);
+    if (Number.isNaN(parsedBirthDate.getTime())) {
+      return res.status(400).json({
+        message: "birthDate inválida. Use um formato reconhecido (YYYY-MM-DD).",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    let allowedCities = [];
+    if (!superAdminFlag) {
+      if (!Array.isArray(adminCities) || adminCities.length === 0) {
+        return res.status(400).json({
+          message:
+            "Informe ao menos um município em adminCities ou marque isSuperAdmin como true.",
+        });
+      }
+
+      allowedCities = Array.from(
+        new Set(
+          adminCities
+            .filter((city) => typeof city === "string" && city.trim() !== "")
+            .map((city) => city.trim()),
+        ),
+      );
+
+      if (allowedCities.length === 0) {
+        return res.status(400).json({
+          message:
+            "Nenhum município válido informado. Verifique os valores em adminCities.",
+        });
+      }
+    }
+
+    const newAdmin = await User.create({
+      name,
+      email: normalizedEmail,
+      cpf: sanitizedCpf,
+      phone: sanitizedPhone,
+      birthDate: parsedBirthDate,
+      address: {
+        bairro: address.bairro,
+        rua: address.rua || null,
+        numero: address.numero || null,
+        complemento: address.complemento || null,
+      },
+      isAdmin: true,
+      adminCities: superAdminFlag ? [] : allowedCities,
+      passwordHash: hashedPassword,
+    });
+
+    return res.status(201).json({
+      message: "Administrador criado com sucesso.",
+      admin: {
+        userId: newAdmin._id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        cpf: newAdmin.cpf,
+        phone: newAdmin.phone,
+        adminCities: newAdmin.adminCities,
+        isSuperAdmin: superAdminFlag,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Erro ao criar administrador:", error);
+    return res.status(500).json({ message: "Erro interno ao criar administrador." });
+  }
+};
 
 /**
  * GET /api/admin/stats

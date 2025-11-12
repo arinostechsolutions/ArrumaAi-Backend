@@ -12,8 +12,10 @@ const healthAppointmentRoutes = require("./routes/healthAppointmentRoutes");
 const userRoutes = require("./routes/userRoutes");
 const feedRoutes = require("./routes/feedRoutes");
 const contentReportRoutes = require("./routes/contentReportRoutes");
+const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const geocodingRoutes = require("./routes/geocodingRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 
 // Carrega o arquivo .env baseado no NODE_ENV
 const nodeEnv = process.env.NODE_ENV || "development";
@@ -67,8 +69,10 @@ app.use("/api/health", healthAppointmentRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/feed", feedRoutes);
 app.use("/api/content-report", contentReportRoutes);
+app.use("/api/admin/auth", adminAuthRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/geocoding", geocodingRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";

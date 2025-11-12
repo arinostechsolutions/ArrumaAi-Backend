@@ -112,6 +112,30 @@ const UserSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    adminCities: {
+      type: [String],
+      default: [],
+    },
+    passwordHash: {
+      type: String,
+      required: function () {
+        return this.isAdmin;
+      },
+      select: false,
+    },
+    lastLoginAt: {
+      type: Date,
+    },
+    adminInviteToken: {
+      token: {
+        type: String,
+        required: false,
+      },
+      expiresAt: {
+        type: Date,
+        required: false,
+      },
+    },
   },
   { timestamps: true }
 );
