@@ -42,10 +42,16 @@ app.use(
   cors({
     origin: true, // Permite todas as origens e define automaticamente o Access-Control-Allow-Origin
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "X-Admin-Bootstrap-Token",
+    ],
     credentials: true,
   })
 );
+app.options("*", cors());
 
 // Middleware para log de requisições (útil para debug)
 app.use((req, res, next) => {
