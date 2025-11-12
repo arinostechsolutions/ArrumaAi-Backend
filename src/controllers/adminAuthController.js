@@ -2,6 +2,31 @@ const bcrypt = require("bcryptjs");
 const User = require("../models/User");
 const { signAdminToken } = require("../utils/jwt");
 
+const maskEmail = (email) => {
+  if (!email) return null;
+  const [local, domain] = email.split("@");
+  if (!domain) return `${local.slice(0, 2)}***`;
+  return `${local.slice(0, 2)}***@${domain}`;
+};
+
+const maskCpf = (cpf) => {
+  if (!cpf) return null;
+  const numericCpf = cpf.replace(/\D/g, "");
+  if (numericCpf.length < 4) return "***";
+  return `${numericCpf.slice(0, 3)}***${numericCpf.slice(-2)}`;
+};
+
+const maskToken = (token) => {
+  if (!token) return null;
+  if (token.length <= 6) return "***";
+  return `${token.slice(0, 3)}***${token.slice(-3)}`;
+};
+
+const logContext = (message, context = {}, level = "log") => {
+  const logger = console[level] || console.log;
+  logger(`[admin-auth] ${message}`, context);
+};
+
 exports.login = async (req, res) => {
   try {
     const { email, cpf, password } = req.body;
@@ -14,6 +39,11 @@ exports.login = async (req, res) => {
 
     const normalizedCpf = cpf ? cpf.replace(/\D/g, "") : null;
 
+    logContext("Tentativa de login recebida", {
+      email: maskEmail(email),
+      cpf: maskCpf(normalizedCpf),
+    });
+
     const user = await User.findOne(
       email
         ? { email: email.toLowerCase(), isAdmin: true }
@@ -21,6 +51,16 @@ exports.login = async (req, res) => {
     ).select("+passwordHash");
 
     if (!user || !user.passwordHash) {
+      logContext(
+        "Login rejeitado: usuário não encontrado ou sem senha cadastrada",
+        {
+          email: maskEmail(email),
+          cpf: maskCpf(normalizedCpf),
+          userFound: Boolean(user),
+          hasPassword: Boolean(user?.passwordHash),
+        },
+        "warn",
+      );
       return res.status(401).json({
         message: "Credenciais inválidas.",
       });
@@ -29,6 +69,15 @@ exports.login = async (req, res) => {
     const passwordIsValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordIsValid) {
+      logContext(
+        "Login rejeitado: senha inválida",
+        {
+          email: maskEmail(email),
+          cpf: maskCpf(normalizedCpf),
+          userId: user._id,
+        },
+        "warn",
+      );
       return res.status(401).json({
         message: "Credenciais inválidas.",
       });
@@ -47,6 +96,17 @@ exports.login = async (req, res) => {
 
     user.lastLoginAt = new Date();
     await user.save();
+
+    logContext(
+      "Login aceito",
+      {
+        userId: user._id,
+        email: maskEmail(user.email),
+        allowedCitiesCount: allowedCities.length,
+        isSuperAdmin: allowedCities.length === 0,
+      },
+      "info",
+    );
 
     return res.status(200).json({
       token,
@@ -70,7 +130,23 @@ exports.bootstrapSuperAdmin = async (req, res) => {
   try {
     const bootstrapSecret = process.env.ADMIN_BOOTSTRAP_TOKEN;
 
+    logContext(
+      "Requisição de bootstrap recebida",
+      {
+        hasEnvToken: Boolean(bootstrapSecret),
+        tokenHeader: maskToken(req.headers["x-admin-bootstrap-token"]),
+        tokenBody: maskToken(req.body?.bootstrapToken),
+        tokenQuery: maskToken(req.query?.bootstrapToken),
+      },
+      "info",
+    );
+
     if (!bootstrapSecret) {
+      logContext(
+        "Bootstrap bloqueado: ADMIN_BOOTSTRAP_TOKEN ausente no ambiente",
+        {},
+        "error",
+      );
       return res.status(500).json({
         message:
           "ADMIN_BOOTSTRAP_TOKEN não configurado. Defina a variável de ambiente para habilitar o bootstrap.",
@@ -83,6 +159,14 @@ exports.bootstrapSuperAdmin = async (req, res) => {
       req.query?.bootstrapToken;
 
     if (!providedToken || providedToken !== bootstrapSecret) {
+      logContext(
+        "Bootstrap bloqueado: token inválido",
+        {
+          providedToken: maskToken(providedToken),
+          matchesSecret: providedToken === bootstrapSecret,
+        },
+        "warn",
+      );
       return res.status(403).json({
         message: "Token de bootstrap inválido.",
       });
@@ -94,6 +178,11 @@ exports.bootstrapSuperAdmin = async (req, res) => {
     });
 
     if (existingSuperAdmin) {
+      logContext(
+        "Bootstrap interrompido: super-admin já existe",
+        { existingSuperAdminId: existingSuperAdmin._id },
+        "warn",
+      );
       return res.status(409).json({
         message:
           "Já existe um super-admin cadastrado. Use o login padrão ou remova o usuário existente.",
@@ -111,12 +200,30 @@ exports.bootstrapSuperAdmin = async (req, res) => {
     } = req.body || {};
 
     if (!name || !email || !password) {
+      logContext(
+        "Bootstrap rejeitado: campos obrigatórios ausentes",
+        {
+          hasName: Boolean(name),
+          hasEmail: Boolean(email),
+          hasPassword: Boolean(password),
+        },
+        "warn",
+      );
       return res.status(400).json({
         message: "Campos obrigatórios: name, email e password.",
       });
     }
 
     if (!phone || !birthDate || !address?.bairro) {
+      logContext(
+        "Bootstrap rejeitado: campos de contato ausentes",
+        {
+          hasPhone: Boolean(phone),
+          hasBirthDate: Boolean(birthDate),
+          hasBairro: Boolean(address?.bairro),
+        },
+        "warn",
+      );
       return res.status(400).json({
         message:
           "Informe telefone, data de nascimento e bairro para o cadastro do super-admin.",
@@ -135,6 +242,15 @@ exports.bootstrapSuperAdmin = async (req, res) => {
     });
 
     if (existingUser) {
+      logContext(
+        "Bootstrap rejeitado: usuário já existe",
+        {
+          email: maskEmail(normalizedEmail),
+          cpf: maskCpf(sanitizedCpf),
+          existingUserId: existingUser._id,
+        },
+        "warn",
+      );
       return res.status(409).json({
         message: "Já existe um usuário com este e-mail ou CPF.",
       });
@@ -142,6 +258,11 @@ exports.bootstrapSuperAdmin = async (req, res) => {
 
     const parsedBirthDate = new Date(birthDate);
     if (Number.isNaN(parsedBirthDate.getTime())) {
+      logContext(
+        "Bootstrap rejeitado: birthDate inválida",
+        { birthDate },
+        "warn",
+      );
       return res.status(400).json({
         message: "birthDate inválida. Use um formato reconhecido (YYYY-MM-DD).",
       });
@@ -166,6 +287,16 @@ exports.bootstrapSuperAdmin = async (req, res) => {
       passwordHash: hashedPassword,
     });
 
+    logContext(
+      "Bootstrap concluído com sucesso",
+      {
+        newSuperAdminId: newSuperAdmin._id,
+        email: maskEmail(newSuperAdmin.email),
+        cpf: maskCpf(newSuperAdmin.cpf),
+      },
+      "info",
+    );
+
     return res.status(201).json({
       message: "Super-admin criado com sucesso.",
       admin: {
@@ -184,5 +315,4 @@ exports.bootstrapSuperAdmin = async (req, res) => {
       .json({ message: "Erro interno ao criar super-admin." });
   }
 };
-
 
