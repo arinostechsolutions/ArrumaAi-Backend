@@ -7,6 +7,7 @@ const {
   resolveContentReport,
   getRecentUsers,
   getRecentReports,
+  createAdminUser,
 } = require("../controllers/adminController");
 const { isAdmin } = require("../middlewares/adminMiddleware");
 
@@ -14,6 +15,9 @@ const router = express.Router();
 
 // Todas as rotas admin exigem autenticação de admin
 router.use(isAdmin);
+
+// Criar administradores (super-admin)
+router.post("/users", createAdminUser);
 
 // Estatísticas gerais
 router.get("/stats", getStats);
