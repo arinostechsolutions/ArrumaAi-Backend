@@ -261,16 +261,18 @@ exports.getTopReports = async (req, res) => {
     const cityId = resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { sort = "engagement", limit = 5, status } = req.query;
+    const { sort = "engagement", limit = 5, status, page = 1 } = req.query;
 
     const parsedLimit = Math.min(parseInt(limit, 10) || 5, 50);
+    const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
     const match = { "city.id": cityId };
 
     if (status && status !== "all") {
       match.status = status;
     }
 
-    const query = Report.find(match)
+    // Buscar reports com todos os campos necessários
+    const reports = await Report.find(match)
       .select([
         "reportType",
         "status",
@@ -286,32 +288,78 @@ exports.getTopReports = async (req, res) => {
       ])
       .lean();
 
+    // Calcular engagementScore dinamicamente se não estiver definido ou for 0
+    const reportsWithScore = reports.map((report) => {
+      const likesCount = Array.isArray(report.likes) ? report.likes.length : 0;
+      const viewsCount = Array.isArray(report.views) ? report.views.length : 0;
+      const sharesCount = Array.isArray(report.shares) ? report.shares.length : 0;
+      
+      // Calcular score se não existir ou for 0
+      let engagementScore = report.engagementScore || 0;
+      if (engagementScore === 0 && (likesCount > 0 || viewsCount > 0 || sharesCount > 0)) {
+        // Fórmula simples: likes * 3 + views * 1 + shares * 5
+        engagementScore = likesCount * 3 + viewsCount * 1 + sharesCount * 5;
+      }
+
+      return {
+        ...report,
+        engagementScore,
+        likesCount,
+        viewsCount,
+        sharesCount,
+      };
+    });
+
+    // Ordenar os reports
     if (sort === "oldest") {
-      query.sort({ createdAt: 1 });
+      reportsWithScore.sort((a, b) => {
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        return dateA - dateB;
+      });
     } else {
-      query.sort({ engagementScore: -1, createdAt: -1 });
+      // Ordenar por engagementScore (decrescente) e depois por createdAt (decrescente)
+      reportsWithScore.sort((a, b) => {
+        if (b.engagementScore !== a.engagementScore) {
+          return b.engagementScore - a.engagementScore;
+        }
+        const dateA = new Date(a.createdAt);
+        const dateB = new Date(b.createdAt);
+        return dateB - dateA;
+      });
     }
 
-    const reports = await query.limit(parsedLimit);
+    // Calcular paginação
+    const total = reportsWithScore.length;
+    const totalPages = Math.ceil(total / parsedLimit);
+    const startIndex = (parsedPage - 1) * parsedLimit;
+    const endIndex = startIndex + parsedLimit;
 
-    const formatted = reports.map((report) => ({
-      id: report._id,
+    // Limitar resultados com paginação
+    const paginatedReports = reportsWithScore.slice(startIndex, endIndex);
+
+    // Formatar resposta
+    const formatted = paginatedReports.map((report) => ({
+      id: report._id ? report._id.toString() : report._id,
       reportType: report.reportType,
       status: report.status,
       address: report.address,
       bairro: report.bairro || null,
       createdAt: report.createdAt,
-      engagementScore: report.engagementScore || 0,
-      likesCount: Array.isArray(report.likes) ? report.likes.length : 0,
-      viewsCount: Array.isArray(report.views) ? report.views.length : 0,
-      sharesCount: Array.isArray(report.shares) ? report.shares.length : 0,
+      engagementScore: report.engagementScore,
+      likesCount: report.likesCount,
+      viewsCount: report.viewsCount,
+      sharesCount: report.sharesCount,
       imageUrl: report.imageUrl || null,
     }));
 
     res.status(200).json({
       cityId,
       sortBy: sort,
+      page: parsedPage,
       limit: parsedLimit,
+      total,
+      totalPages,
       results: formatted,
     });
   } catch (error) {
