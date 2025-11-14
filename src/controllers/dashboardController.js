@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Report = require("../models/Report");
+const City = require("../models/City");
 
 function resolveDateRange(startDate, endDate) {
   const range = {};
@@ -23,10 +24,16 @@ function resolveDateRange(startDate, endDate) {
   return range;
 }
 
-function buildMatch(cityId, range = {}) {
+function buildMatch(cityId, range = {}, allowedReportTypes = null) {
   const match = { "city.id": cityId };
 
-  if (range.start || range.end) {
+  // Filtrar por reportTypes se houver restrição de secretaria
+  if (allowedReportTypes && allowedReportTypes.length > 0) {
+    match.reportType = { $in: allowedReportTypes };
+  }
+
+  // Verificar se range é um objeto válido antes de acessar suas propriedades
+  if (range && typeof range === 'object' && (range.start || range.end)) {
     match.createdAt = {};
     if (range.start) {
       match.createdAt.$gte = range.start;
@@ -50,7 +57,7 @@ function toDictionary(entries) {
   }, {});
 }
 
-function resolveCityContext(req, res) {
+async function resolveCityContext(req, res) {
   const admin = req.admin;
 
   if (!admin) {
@@ -62,13 +69,33 @@ function resolveCityContext(req, res) {
     req.query.cityId || req.body.cityId || req.params.cityId;
 
   if (requestedCityId) {
-    if (!admin.isSuperAdmin && !admin.allowedCities.includes(requestedCityId)) {
+    // Prefeitos só podem acessar sua cidade
+    if (admin.isMayor && !admin.isSuperAdmin) {
+      const mayorCityId = admin.allowedCities?.[0];
+      if (mayorCityId && requestedCityId !== mayorCityId) {
+        res.status(403).json({
+          message: "Você só pode acessar os dados da sua cidade.",
+        });
+        return null;
+      }
+      return mayorCityId || requestedCityId;
+    }
+    
+    if (!admin.isSuperAdmin && !admin.isMayor && !admin.allowedCities.includes(requestedCityId)) {
       res.status(403).json({
         message: "Você não tem permissão para acessar os dados deste município.",
       });
       return null;
     }
     return requestedCityId;
+  }
+
+  // Prefeitos sempre usam sua cidade
+  if (admin.isMayor && !admin.isSuperAdmin) {
+    const mayorCityId = admin.allowedCities?.[0];
+    if (mayorCityId) {
+      return mayorCityId;
+    }
   }
 
   if (admin.isSuperAdmin) {
@@ -89,16 +116,78 @@ function resolveCityContext(req, res) {
   return null;
 }
 
+/**
+ * Função auxiliar para obter reportTypes permitidos para o admin
+ * Se for super admin, retorna null (sem filtro)
+ * Se tiver secretaria, retorna array de reportTypes da secretaria
+ * Se for prefeito e tiver secretariaId no query, filtra por essa secretaria
+ */
+async function getAllowedReportTypes(cityId, admin, secretariaId = null) {
+  console.log(`🔍 getAllowedReportTypes - cityId: ${cityId}, isMayor: ${admin.isMayor}, isSuperAdmin: ${admin.isSuperAdmin}, secretariaId: ${secretariaId}`);
+  
+  // Super admins não têm filtro de reportTypes
+  if (admin.isSuperAdmin) {
+    return null; // Sem filtro
+  }
+
+  // Prefeitos podem filtrar por secretaria específica se fornecido
+  if (admin.isMayor && secretariaId) {
+    console.log(`🏛️ Prefeito filtrando por secretaria: ${secretariaId}`);
+    const city = await City.findOne({ id: cityId }).select("secretarias modules.reports.reportTypes");
+    if (!city) {
+      console.log(`❌ Cidade não encontrada: ${cityId}`);
+      return null;
+    }
+
+    const secretaria = city.secretarias?.find((s) => s.id === secretariaId);
+    if (!secretaria) {
+      console.log(`❌ Secretaria não encontrada: ${secretariaId}`);
+      return null;
+    }
+
+    console.log(`✅ Secretaria encontrada com ${secretaria.reportTypes?.length || 0} reportTypes`);
+    return secretaria.reportTypes || [];
+  }
+
+  // Prefeitos sem filtro de secretaria não têm restrição
+  if (admin.isMayor) {
+    console.log(`👑 Prefeito sem filtro de secretaria - retornando null (sem filtro)`);
+    return null; // Sem filtro
+  }
+
+  // Admins de secretaria têm filtro automático pela sua secretaria
+  if (!admin.secretaria) {
+    return null;
+  }
+
+  const city = await City.findOne({ id: cityId }).select("secretarias modules.reports.reportTypes");
+  if (!city) {
+    return null;
+  }
+
+  const secretaria = city.secretarias?.find((s) => s.id === admin.secretaria);
+  if (!secretaria) {
+    return null;
+  }
+
+  return secretaria.reportTypes || [];
+}
+
 exports.getOverview = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    console.log(`📊 getOverview - admin.isMayor: ${req.admin?.isMayor}, admin.isSuperAdmin: ${req.admin?.isSuperAdmin}, admin.allowedCities:`, req.admin?.allowedCities);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, secretariaId } = req.query;
+    console.log(`📊 getOverview - cityId: ${cityId}, secretariaId: ${secretariaId}`);
 
     const range = resolveDateRange(startDate, endDate);
-    const baseMatch = buildMatch(cityId);
-    const periodMatch = buildMatch(cityId, range);
+    
+    // Filtrar por secretaria se não for super admin
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    const baseMatch = buildMatch(cityId, {}, allowedReportTypes);
+    const periodMatch = buildMatch(cityId, range, allowedReportTypes);
 
     const last7DaysStart = new Date();
     last7DaysStart.setDate(last7DaysStart.getDate() - 6);
@@ -180,10 +269,10 @@ exports.getOverview = async (req, res) => {
 
 exports.getReportsSummary = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { startDate, endDate } = req.query;
+    const { startDate, endDate, secretariaId } = req.query;
 
     const range = resolveDateRange(startDate, endDate);
 
@@ -194,7 +283,8 @@ exports.getReportsSummary = async (req, res) => {
       range.start = defaultStart;
     }
 
-    const match = buildMatch(cityId, range);
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    const match = buildMatch(cityId, range, allowedReportTypes);
 
     const [byStatus, byType, byNeighborhood, timeline] = await Promise.all([
       Report.aggregate([
@@ -258,17 +348,29 @@ exports.getReportsSummary = async (req, res) => {
 
 exports.getTopReports = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { sort = "engagement", limit = 5, status, page = 1 } = req.query;
+    const { sort = "engagement", limit = 5, status, page = 1, secretariaId, startDate, endDate } = req.query;
 
     const parsedLimit = Math.min(parseInt(limit, 10) || 5, 50);
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
-    const match = { "city.id": cityId };
+    
+    // Filtrar por secretaria se não for super admin
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    
+    // Resolver filtro de data
+    const range = resolveDateRange(startDate, endDate);
+    
+    // Construir match com filtros de cidade, data e secretaria
+    const match = buildMatch(cityId, range, allowedReportTypes);
 
+    // Filtrar por status (excluir resolvido se status for "all" ou não especificado)
     if (status && status !== "all") {
       match.status = status;
+    } else if (!status || status === "all") {
+      // Excluir resolvidos quando status é "all" ou não especificado
+      match.status = { $ne: "resolvido" };
     }
 
     // Buscar reports com todos os campos necessários
@@ -288,18 +390,15 @@ exports.getTopReports = async (req, res) => {
       ])
       .lean();
 
-    // Calcular engagementScore dinamicamente se não estiver definido ou for 0
+    // Calcular engagementScore dinamicamente sempre com a fórmula correta
     const reportsWithScore = reports.map((report) => {
       const likesCount = Array.isArray(report.likes) ? report.likes.length : 0;
       const viewsCount = Array.isArray(report.views) ? report.views.length : 0;
       const sharesCount = Array.isArray(report.shares) ? report.shares.length : 0;
       
-      // Calcular score se não existir ou for 0
-      let engagementScore = report.engagementScore || 0;
-      if (engagementScore === 0 && (likesCount > 0 || viewsCount > 0 || sharesCount > 0)) {
-        // Fórmula simples: likes * 3 + views * 1 + shares * 5
-        engagementScore = likesCount * 3 + viewsCount * 1 + sharesCount * 5;
-      }
+      // Sempre recalcular o score com a fórmula simples e consistente
+      // Fórmula: (Likes × 3) + (Views × 1) + (Shares × 5)
+      const engagementScore = likesCount * 3 + viewsCount * 1 + sharesCount * 5;
 
       return {
         ...report,
@@ -370,10 +469,10 @@ exports.getTopReports = async (req, res) => {
 
 exports.getMapData = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { status, reportType } = req.query;
+    const { status, reportType, secretariaId } = req.query;
 
     const match = {
       "city.id": cityId,
@@ -381,12 +480,16 @@ exports.getMapData = async (req, res) => {
       "location.coordinates": { $exists: true, $ne: null },
     };
 
-    if (status && status !== "all") {
-      match.status = status;
+    // Filtrar por secretaria se não for super admin
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    if (allowedReportTypes && allowedReportTypes.length > 0) {
+      match.reportType = { $in: allowedReportTypes };
+    } else if (reportType) {
+      match.reportType = reportType;
     }
 
-    if (reportType) {
-      match.reportType = reportType;
+    if (status && status !== "all") {
+      match.status = status;
     }
 
     const reports = await Report.find(match)
@@ -446,10 +549,19 @@ exports.getMapData = async (req, res) => {
 
 exports.getReportStatusOptions = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const statuses = await Report.distinct("status", { "city.id": cityId });
+    const { secretariaId } = req.query;
+    const match = { "city.id": cityId };
+    
+    // Filtrar por secretaria se não for super admin
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    if (allowedReportTypes && allowedReportTypes.length > 0) {
+      match.reportType = { $in: allowedReportTypes };
+    }
+
+    const statuses = await Report.distinct("status", match);
     statuses.sort((a, b) =>
       String(a).localeCompare(String(b), "pt-BR", { sensitivity: "base" })
     );
@@ -466,7 +578,7 @@ exports.getReportStatusOptions = async (req, res) => {
 
 exports.getReportsList = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
     const {
@@ -474,6 +586,7 @@ exports.getReportsList = async (req, res) => {
       page = 1,
       limit = 20,
       search,
+      secretariaId,
     } = req.query;
 
     const parsedPage = Math.max(parseInt(page, 10) || 1, 1);
@@ -482,6 +595,12 @@ exports.getReportsList = async (req, res) => {
     const filter = {
       "city.id": cityId,
     };
+
+    // Filtrar por secretaria se não for super admin
+    const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
+    if (allowedReportTypes && allowedReportTypes.length > 0) {
+      filter.reportType = { $in: allowedReportTypes };
+    }
 
     if (status && status !== "all") {
       filter.status = status;
@@ -542,7 +661,7 @@ exports.getReportsList = async (req, res) => {
 
 exports.updateReportStatus = async (req, res) => {
   try {
-    const cityId = resolveCityContext(req, res);
+    const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
     const { reportId } = req.params;
@@ -567,8 +686,30 @@ exports.updateReportStatus = async (req, res) => {
       return res.status(404).json({ message: "Denúncia não encontrada para este município." });
     }
 
+    const oldStatus = report.status;
     report.status = normalizedStatus;
     await report.save();
+
+    // Registrar ação no histórico
+    if (req.admin) {
+      const { logActivity } = require("../utils/activityLogger");
+      await logActivity({
+        admin: req.admin,
+        actionType: "report_status_update",
+        description: `Status da irregularidade alterado de "${oldStatus}" para "${normalizedStatus}"`,
+        details: {
+          reportId: report._id.toString(),
+          reportType: report.reportType,
+          oldStatus,
+          newStatus: normalizedStatus,
+          address: report.address,
+        },
+        entityType: "report",
+        entityId: report._id,
+        cityId,
+        req,
+      });
+    }
 
     res.status(200).json({
       message: "Status atualizado com sucesso.",

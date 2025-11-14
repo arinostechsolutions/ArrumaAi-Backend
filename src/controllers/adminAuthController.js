@@ -87,15 +87,43 @@ exports.login = async (req, res) => {
       ? user.adminCities.filter((city) => typeof city === "string" && city.trim() !== "")
       : [];
 
+    const isMayor = user.isMayor === true;
+    const isSuperAdmin = !isMayor && allowedCities.length === 0;
+
     const token = signAdminToken({
       userId: user._id.toString(),
       name: user.name,
       allowedCities,
-      isSuperAdmin: allowedCities.length === 0,
+      isSuperAdmin,
+      isMayor,
+      secretaria: user.secretaria || null,
     });
 
     user.lastLoginAt = new Date();
     await user.save();
+
+    // Registrar login no histórico
+    const { logActivity } = require("../utils/activityLogger");
+    await logActivity({
+      admin: {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        cpf: user.cpf,
+        secretaria: user.secretaria || null,
+        isSuperAdmin: isSuperAdmin,
+        isMayor: isMayor,
+      },
+      actionType: "login",
+      description: "Login realizado no dashboard",
+      details: {
+        allowedCities,
+        isSuperAdmin: isSuperAdmin,
+        isMayor: isMayor,
+      },
+      cityId: allowedCities.length === 1 ? allowedCities[0] : null,
+      req,
+    });
 
     logContext(
       "Login aceito",
@@ -116,7 +144,9 @@ exports.login = async (req, res) => {
         email: user.email || null,
         cpf: user.cpf,
         allowedCities,
-        isSuperAdmin: allowedCities.length === 0,
+        isSuperAdmin: isSuperAdmin,
+        isMayor: isMayor,
+        secretaria: user.secretaria || null,
         lastLoginAt: user.lastLoginAt,
       },
     });

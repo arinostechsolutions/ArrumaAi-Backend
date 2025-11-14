@@ -112,9 +112,26 @@ const UserSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    isMayor: {
+      type: Boolean,
+      required: true,
+      default: false,
+    },
     adminCities: {
       type: [String],
       default: [],
+    },
+    secretaria: {
+      type: String,
+      required: function () {
+        // Obrigatório apenas para admins que não são super admin nem prefeito
+        return (
+          this.isAdmin &&
+          !this.isMayor &&
+          this.adminCities &&
+          this.adminCities.length > 0
+        );
+      },
     },
     passwordHash: {
       type: String,

@@ -31,12 +31,18 @@ exports.isAdmin = async (req, res, next) => {
         ? user.adminCities.filter((city) => typeof city === "string" && city.trim() !== "")
         : [];
 
+      // Prefeito tem acesso completo mas apenas à sua cidade
+      const isMayor = user.isMayor === true;
+      const isSuperAdmin = !isMayor && allowedCities.length === 0;
+
       req.admin = {
         userId: user._id,
         name: user.name,
         cpf: user.cpf,
         allowedCities,
-        isSuperAdmin: allowedCities.length === 0,
+        isSuperAdmin,
+        isMayor,
+        secretaria: user.secretaria || null,
       };
 
       return next();
@@ -76,9 +82,15 @@ exports.isAdmin = async (req, res, next) => {
       ? user.adminCities.filter((city) => typeof city === "string" && city.trim() !== "")
       : [];
 
+    // Prefeito tem acesso completo mas apenas à sua cidade
+    const isMayor = user.isMayor === true;
+    const isSuperAdmin = !isMayor && allowedCities.length === 0;
+
     console.log(
-      `✅ Acesso admin concedido - User: ${userId} (${user.name}) - Cidades: ${
-        allowedCities.length > 0 ? allowedCities.join(", ") : "todas"
+      `✅ Acesso admin concedido - User: ${userId} (${user.name}) - Tipo: ${
+        isMayor ? "Prefeito" : isSuperAdmin ? "Super Admin" : "Admin Secretaria"
+      } - Cidades: ${
+        allowedCities.length > 0 ? allowedCities.join(", ") : isMayor ? "sua cidade" : "todas"
       }`,
     );
     
@@ -88,7 +100,9 @@ exports.isAdmin = async (req, res, next) => {
       name: user.name,
       cpf: user.cpf,
       allowedCities,
-      isSuperAdmin: allowedCities.length === 0,
+      isSuperAdmin,
+      isMayor,
+      secretaria: user.secretaria || null,
     };
 
     next();
