@@ -8,6 +8,12 @@ const {
   getReportsList,
   updateReportStatus,
 } = require("../controllers/dashboardController");
+const {
+  getByNeighborhood,
+  getByType,
+  getTrends,
+  getComparison,
+} = require("../controllers/analyticsController");
 const { isAdmin } = require("../middlewares/adminMiddleware");
 
 const router = express.Router();
@@ -21,6 +27,12 @@ router.get("/reports/status-options", getReportStatusOptions);
 router.get("/reports/list", getReportsList);
 router.patch("/reports/:reportId/status", updateReportStatus);
 router.get("/map", getMapData);
+
+// Analytics routes
+router.get("/analytics/by-neighborhood", getByNeighborhood);
+router.get("/analytics/by-type", getByType);
+router.get("/analytics/trends", getTrends);
+router.get("/analytics/comparison", getComparison);
 
 module.exports = router;
 

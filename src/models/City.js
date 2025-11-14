@@ -55,11 +55,22 @@ const CitySchema = new mongoose.Schema(
           {
             id: { type: String, required: true },
             label: { type: String, required: true },
+            secretaria: { type: String, required: false }, // ID da secretaria responsável
           },
         ],
         reportList: [{ type: mongoose.Schema.Types.ObjectId, ref: "Report" }],
       },
     },
+
+    // 🏛️ Secretarias da cidade
+    secretarias: [
+      {
+        id: { type: String, required: true }, // ex: "obras", "meio_ambiente"
+        label: { type: String, required: true }, // ex: "Secretaria de Obras"
+        reportTypes: [{ type: String }], // IDs dos reportTypes associados
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
 
     users: { type: [mongoose.Schema.Types.ObjectId], ref: "User", default: [] },
 
