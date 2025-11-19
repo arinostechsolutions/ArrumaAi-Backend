@@ -24,4 +24,9 @@ pnpm-debug.log*
 *-*.json
 *service-account*.json
 *credentials*.json
-config/
+*credentials*.txt
+config/google-vision-credentials*.json
+config/google-vision-credentials*.txt
+RAILWAY-SETUP.md
+GOOGLE-VISION-SETUP.md
+IMAGE-ANONYMIZATION.md
