@@ -24,4 +24,4 @@ pnpm-debug.log*
 *-*.json
 *service-account*.json
 *credentials*.json
-config/google-vision-credentials.json
+*google-vision-credentials-railway.txt
