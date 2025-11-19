@@ -9,3 +9,4 @@ router.post("/register", registerMayor);
 module.exports = router;
 
 
+

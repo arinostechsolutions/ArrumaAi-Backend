@@ -18,6 +18,9 @@ const secretariaRoutes = require("./routes/secretariaRoutes");
 const geocodingRoutes = require("./routes/geocodingRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const mayorRoutes = require("./routes/mayorRoutes");
+const messageRoutes = require("./routes/messageRoutes");
+const positivePostRoutes = require("./routes/positivePostRoutes");
+const uploadRoutes = require("./routes/uploadRoutes");
 
 // Carrega o arquivo .env baseado no NODE_ENV
 const nodeEnv = process.env.NODE_ENV || "development";
@@ -83,6 +86,9 @@ app.use("/api/admin", secretariaRoutes);
 app.use("/api/mayor", mayorRoutes);
 app.use("/api/geocoding", geocodingRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/positive-posts", positivePostRoutes);
+app.use("/api/upload", uploadRoutes);
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";

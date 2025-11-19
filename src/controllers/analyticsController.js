@@ -33,7 +33,7 @@ function buildMatch(cityId, range = {}, allowedReportTypes = null, bairro = null
     match.bairro = bairro;
   }
 
-  // Filtro por tipo de irregularidade específico
+  // Filtro por tipo de sugestão de melhoria específico
   // Se houver um tipo específico, usar ele
   // Caso contrário, usar allowedReportTypes se disponível
   if (reportType) {
@@ -154,7 +154,7 @@ async function resolveCityContext(req, res) {
 
 /**
  * GET /api/dashboard/analytics/by-neighborhood
- * Retorna irregularidades agrupadas por bairro
+ * Retorna sugestões de melhorias agrupadas por bairro
  */
 exports.getByNeighborhood = async (req, res) => {
   try {
@@ -225,7 +225,7 @@ exports.getByNeighborhood = async (req, res) => {
 
 /**
  * GET /api/dashboard/analytics/by-type
- * Retorna irregularidades agrupadas por tipo
+ * Retorna sugestões de melhorias agrupadas por tipo
  */
 exports.getByType = async (req, res) => {
   try {

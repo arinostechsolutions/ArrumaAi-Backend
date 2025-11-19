@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Report = require("../models/Report");
 const City = require("../models/City");
+const { processAndUploadImage } = require("../services/imageProcessingService");
 
 // Criar uma nova denúncia e associá-la à cidade
 exports.createReport = async (req, res) => {
@@ -24,6 +25,20 @@ exports.createReport = async (req, res) => {
       return res
         .status(400)
         .json({ message: "Todos os campos obrigatórios devem ser preenchidos (incluindo usuário)." });
+    }
+
+    // Processar imagem para compliance LGPD (aplicar blur em rostos e placas)
+    let processedImageUrl = imageUrl;
+    if (imageUrl && process.env.ENABLE_IMAGE_ANONYMIZATION === "true") {
+      try {
+        console.log("🔒 Processando imagem para compliance LGPD...");
+        processedImageUrl = await processAndUploadImage(imageUrl);
+        console.log("✅ Imagem processada:", processedImageUrl);
+      } catch (error) {
+        console.error("⚠️ Erro ao processar imagem, usando original:", error.message);
+        // Continua com imagem original em caso de erro
+        processedImageUrl = imageUrl;
+      }
     }
 
     // Buscar a cidade associada à denúncia
@@ -69,7 +84,7 @@ exports.createReport = async (req, res) => {
       city,
       reportType,
       address,
-      imageUrl,
+      imageUrl: processedImageUrl, // Usar imagem processada
       referencia,
       rua,
       bairro,

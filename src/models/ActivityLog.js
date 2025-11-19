@@ -36,14 +36,14 @@ const activityLogSchema = new mongoose.Schema(
       enum: [
         "login", // Login no sistema
         "logout", // Logout do sistema
-        "report_status_update", // Alteração de status de irregularidade
+        "report_status_update", // Alteração de status de sugestão de melhoria
         "admin_create", // Criação de administrador
         "admin_update", // Edição de administrador
         "admin_delete", // Deleção de administrador
         "secretaria_create", // Criação de secretaria
         "secretaria_update", // Edição de secretaria
         "secretaria_delete", // Deleção de secretaria
-        "report_delete", // Deleção de irregularidade
+        "report_delete", // Deleção de sugestão de melhoria
         "user_ban", // Banimento de usuário
         "content_report_resolve", // Resolução de denúncia de conteúdo
       ],
@@ -103,5 +103,6 @@ activityLogSchema.index({ entityType: 1, entityId: 1 });
 activityLogSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model("ActivityLog", activityLogSchema);
+
 
 

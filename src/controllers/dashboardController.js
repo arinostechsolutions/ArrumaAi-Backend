@@ -472,7 +472,7 @@ exports.getMapData = async (req, res) => {
     const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
-    const { status, reportType, secretariaId } = req.query;
+    const { status, reportType, secretariaId, reportId } = req.query;
 
     const match = {
       "city.id": cityId,
@@ -508,6 +508,41 @@ exports.getMapData = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
+    // Se reportId foi fornecido, buscar o report específico e incluí-lo mesmo que não passe pelos filtros
+    let focusedReport = null;
+    if (reportId) {
+      try {
+        const focused = await Report.findById(reportId)
+          .select([
+            "reportType",
+            "status",
+            "address",
+            "bairro",
+            "rua",
+            "referencia",
+            "imageUrl",
+            "location",
+            "createdAt",
+            "engagementScore",
+            "city.id",
+          ])
+          .lean();
+
+        // Verificar se o report pertence à cidade e tem localização
+        if (
+          focused &&
+          focused["city.id"] === cityId &&
+          focused.location &&
+          Array.isArray(focused.location.coordinates) &&
+          focused.location.coordinates.length === 2
+        ) {
+          focusedReport = focused;
+        }
+      } catch (error) {
+        console.error("Erro ao buscar report focado:", error);
+      }
+    }
+
     const formatted = reports
       .filter(
         (report) =>
@@ -516,7 +551,7 @@ exports.getMapData = async (req, res) => {
           report.location.coordinates.length === 2
       )
       .map((report) => ({
-        id: report._id,
+        id: report._id.toString(),
         reportType: report.reportType,
         status: report.status,
         address: report.address,
@@ -533,6 +568,33 @@ exports.getMapData = async (req, res) => {
           collectedAt: report.location.collectedAt || null,
         },
       }));
+
+    // Adicionar o report focado se não estiver na lista
+    if (focusedReport) {
+      const focusedId = focusedReport._id.toString();
+      const alreadyIncluded = formatted.some((r) => r.id === focusedId);
+      
+      if (!alreadyIncluded) {
+        formatted.unshift({
+          id: focusedId,
+          reportType: focusedReport.reportType,
+          status: focusedReport.status,
+          address: focusedReport.address,
+          bairro: focusedReport.bairro || null,
+          rua: focusedReport.rua || null,
+          referencia: focusedReport.referencia || null,
+          imageUrl: focusedReport.imageUrl || null,
+          createdAt: focusedReport.createdAt,
+          engagementScore: focusedReport.engagementScore || 0,
+          location: {
+            lat: focusedReport.location.coordinates[1],
+            lng: focusedReport.location.coordinates[0],
+            accuracy: focusedReport.location.accuracy || null,
+            collectedAt: focusedReport.location.collectedAt || null,
+          },
+        });
+      }
+    }
 
     res.status(200).json({
       cityId,
@@ -696,7 +758,7 @@ exports.updateReportStatus = async (req, res) => {
       await logActivity({
         admin: req.admin,
         actionType: "report_status_update",
-        description: `Status da irregularidade alterado de "${oldStatus}" para "${normalizedStatus}"`,
+        description: `Status da sugestão de melhoria alterado de "${oldStatus}" para "${normalizedStatus}"`,
         details: {
           reportId: report._id.toString(),
           reportType: report.reportType,

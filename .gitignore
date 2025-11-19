@@ -19,3 +19,9 @@ pnpm-debug.log*
 # EditorConfig
 .vscode/
 .idea/
+
+# Google Cloud Service Account credentials
+*-*.json
+*service-account*.json
+*credentials*.json
+config/google-vision-credentials.json
