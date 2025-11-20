@@ -7,9 +7,18 @@ const {
   updateReportTypesByCity,
   updateMenuByCity,
   updateModulesByCity,
+  getMobileConfig,
+  updateMobileConfig,
+  getAllReportTypes,
+  createCustomReportType,
+  updateCustomReportType,
+  toggleReportTypeStatus,
+  deactivateMultipleReportTypes,
+  activateMultipleReportTypes,
 } = require("../controllers/cityController");
 
 const { paginationMiddleware } = require("../middlewares/paginationMiddleware");
+const { isAdmin } = require("../middlewares/adminMiddleware");
 
 const router = express.Router();
 
@@ -33,5 +42,30 @@ router.put("/updateMenuByCity/:id", updateMenuByCity);
 
 // Atualizar módulos da cidade
 router.put("/updateModulesByCity/:id", updateModulesByCity);
+
+// Buscar configuração mobile de uma cidade
+router.get("/mobile-config/:id", getMobileConfig);
+
+// Atualizar configuração mobile de uma cidade (apenas prefeitos e super admins)
+router.put("/mobile-config/:id", isAdmin, updateMobileConfig);
+
+// ==================== TIPOS DE REPORTS (PADRÃO + PERSONALIZADOS) ====================
+// Listar TODOS os tipos (padrão + personalizados)
+router.get("/report-types/:id", isAdmin, getAllReportTypes);
+
+// Criar tipo personalizado
+router.post("/report-types/:id", isAdmin, createCustomReportType);
+
+// Atualizar tipo (padrão ou personalizado)
+router.put("/report-types/:id/:typeId", isAdmin, updateCustomReportType);
+
+// Desativar/Ativar um tipo
+router.patch("/report-types/:id/:typeId/status", isAdmin, toggleReportTypeStatus);
+
+// Desativar múltiplos tipos
+router.post("/report-types/:id/deactivate-multiple", isAdmin, deactivateMultipleReportTypes);
+
+// Ativar múltiplos tipos
+router.post("/report-types/:id/activate-multiple", isAdmin, activateMultipleReportTypes);
 
 module.exports = router;

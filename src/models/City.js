@@ -56,6 +56,17 @@ const CitySchema = new mongoose.Schema(
             id: { type: String, required: true },
             label: { type: String, required: true },
             secretaria: { type: String, required: false }, // ID da secretaria responsável
+            // Campos para tipos personalizados
+            isCustom: { type: Boolean, default: false }, // Indica se é um tipo personalizado
+            createdBy: {
+              adminId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+              adminName: { type: String },
+              role: { type: String, enum: ["super_admin", "mayor"], default: "mayor" },
+            },
+            allowedSecretarias: [{ type: String }], // IDs das secretarias que podem usar este tipo
+            isActive: { type: Boolean, default: true }, // Para soft delete
+            createdAt: { type: Date, default: Date.now },
+            updatedAt: { type: Date, default: Date.now },
           },
         ],
         reportList: [{ type: mongoose.Schema.Types.ObjectId, ref: "Report" }],
@@ -85,6 +96,12 @@ const CitySchema = new mongoose.Schema(
         },
       ],
       default: [],
+    },
+
+    // 📱 Configurações Mobile
+    mobileConfig: {
+      showFeed: { type: Boolean, default: true },
+      showMap: { type: Boolean, default: true },
     },
   },
   { timestamps: true, collection: "cities" }
