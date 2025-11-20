@@ -326,7 +326,8 @@ exports.getAllReportTypes = async (req, res) => {
     // Filtrar por permissões baseado no tipo de admin
     let filteredTypes = allTypes;
 
-    // Super Admin: vê todos os tipos (incluindo inativos)
+    // Super Admin: vê TODOS os tipos (padrão + personalizados, ativos + inativos)
+    // Inclui tipos criados por prefeitos, secretarias, ou qualquer outro admin
     if (req.admin.isSuperAdmin) {
       filteredTypes = allTypes;
     }
@@ -334,9 +335,10 @@ exports.getAllReportTypes = async (req, res) => {
     else if (req.admin.isMayor) {
       filteredTypes = allTypes;
     }
-    // Secretaria: vê apenas tipos que têm permissão OU tipos padrão (sem isCustom ou isCustom false)
+    // Secretaria: vê apenas tipos que criou OU tipos que estão em allowedSecretarias OU tipos padrão
     // E apenas tipos ATIVOS
     else if (req.admin.secretaria) {
+      const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
       filteredTypes = allTypes.filter((type) => {
         // Apenas tipos ativos para secretarias
         if (type.isActive === false) {
@@ -346,14 +348,18 @@ exports.getAllReportTypes = async (req, res) => {
         if (!type.isCustom || type.isCustom === false) {
           return true;
         }
-        // Tipos personalizados: verificar se a secretaria tem permissão
+        // Tipos personalizados: verificar se a secretaria criou OU se está em allowedSecretarias
         if (type.isCustom === true) {
+          // Se a secretaria criou o tipo, pode ver
+          if (type.createdBy?.adminId?.toString() === req.admin.userId?.toString()) {
+            return true;
+          }
           // Se não tem allowedSecretarias ou está vazio, todas podem ver
           if (!type.allowedSecretarias || type.allowedSecretarias.length === 0) {
             return true;
           }
           // Verificar se a secretaria está na lista
-          return type.allowedSecretarias.includes(req.admin.secretaria);
+          return type.allowedSecretarias.includes(secretariaId);
         }
         return false;
       });
@@ -386,16 +392,17 @@ exports.createCustomReportType = async (req, res) => {
     const { id } = req.params;
     const { label, allowedSecretarias } = req.body;
 
-    // Verificar se é prefeito ou super admin
+    // Verificar se é admin (prefeito, super admin ou secretaria)
     if (!req.admin) {
       return res.status(401).json({
         message: "Acesso negado. Autenticação necessária.",
       });
     }
 
-    if (!req.admin.isMayor && !req.admin.isSuperAdmin) {
+    // Permitir prefeitos, super admins e secretarias criarem tipos
+    if (!req.admin.isMayor && !req.admin.isSuperAdmin && !req.admin.secretaria) {
       return res.status(403).json({
-        message: "Acesso negado. Apenas prefeitos e super administradores podem criar tipos personalizados.",
+        message: "Acesso negado. Apenas prefeitos, super administradores e secretarias podem criar tipos personalizados.",
       });
     }
 
@@ -439,6 +446,21 @@ exports.createCustomReportType = async (req, res) => {
       counter++;
     }
 
+    // Se for secretaria, associar APENAS à secretaria dela (não pode associar a outras)
+    const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+    let finalAllowedSecretarias = [];
+    
+    // Se secretaria criou, associar APENAS à sua própria secretaria
+    if (secretariaId && !req.admin.isMayor && !req.admin.isSuperAdmin) {
+      // Secretarias só podem associar à sua própria secretaria
+      finalAllowedSecretarias = [secretariaId];
+    } else {
+      // Prefeitos e super admins podem associar a múltiplas secretarias
+      finalAllowedSecretarias = Array.isArray(allowedSecretarias)
+        ? allowedSecretarias.filter((s) => typeof s === "string" && s.trim() !== "")
+        : [];
+    }
+
     // Criar novo tipo
     const newType = {
       id: newId,
@@ -447,11 +469,9 @@ exports.createCustomReportType = async (req, res) => {
       createdBy: {
         adminId: req.admin.userId,
         adminName: req.admin.name,
-        role: req.admin.isSuperAdmin ? "super_admin" : "mayor",
+        role: req.admin.isSuperAdmin ? "super_admin" : req.admin.isMayor ? "mayor" : "secretaria",
       },
-      allowedSecretarias: Array.isArray(allowedSecretarias)
-        ? allowedSecretarias.filter((s) => typeof s === "string" && s.trim() !== "")
-        : [],
+      allowedSecretarias: finalAllowedSecretarias,
       isActive: true,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -507,23 +527,25 @@ exports.updateCustomReportType = async (req, res) => {
 
     // Verificar permissões baseado no tipo
     if (existingType.isCustom === true) {
-      // Tipo personalizado: prefeitos e super admins podem editar
-      if (!req.admin.isMayor && !req.admin.isSuperAdmin) {
+      // Super Admin: pode editar TODOS os tipos personalizados (criados por prefeitos, secretarias, etc.)
+      // Prefeitos: podem editar todos os tipos personalizados da sua cidade
+      // Secretarias: podem editar apenas tipos que criaram ou que estão em allowedSecretarias
+      const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+      const isAuthorizedSecretaria = 
+        !req.admin.isMayor && 
+        !req.admin.isSuperAdmin && 
+        secretariaId &&
+        (existingType.createdBy?.adminId?.toString() === req.admin.userId?.toString() ||
+         existingType.allowedSecretarias?.includes(secretariaId));
+
+      if (!req.admin.isMayor && !req.admin.isSuperAdmin && !isAuthorizedSecretaria) {
         return res.status(403).json({
-          message: "Acesso negado. Apenas prefeitos e super administradores podem atualizar tipos personalizados.",
+          message: "Acesso negado. Apenas prefeitos, super administradores e secretarias autorizadas podem atualizar tipos personalizados.",
         });
       }
 
-      // Prefeito só pode editar os que criou
-      if (
-        req.admin.isMayor &&
-        !req.admin.isSuperAdmin &&
-        existingType.createdBy?.adminId?.toString() !== req.admin.userId?.toString()
-      ) {
-        return res.status(403).json({
-          message: "Acesso negado. Você só pode atualizar tipos que você criou.",
-        });
-      }
+      // Prefeitos podem editar todos os tipos personalizados (não apenas os que criaram)
+      // Não precisa de verificação adicional para prefeitos
 
       // Verificar se prefeito tem acesso à cidade
       if (req.admin.isMayor && !req.admin.isSuperAdmin) {
@@ -554,9 +576,17 @@ exports.updateCustomReportType = async (req, res) => {
 
     // allowedSecretarias só pode ser atualizado em tipos personalizados
     if (allowedSecretarias !== undefined && existingType.isCustom === true) {
-      reportTypes[typeIndex].allowedSecretarias = Array.isArray(allowedSecretarias)
-        ? allowedSecretarias.filter((s) => typeof s === "string" && s.trim() !== "")
-        : [];
+      // Se for secretaria, só pode associar à sua própria secretaria
+      const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+      if (secretariaId && !req.admin.isMayor && !req.admin.isSuperAdmin) {
+        // Secretarias só podem associar à sua própria secretaria
+        reportTypes[typeIndex].allowedSecretarias = [secretariaId];
+      } else {
+        // Prefeitos e super admins podem associar a múltiplas secretarias
+        reportTypes[typeIndex].allowedSecretarias = Array.isArray(allowedSecretarias)
+          ? allowedSecretarias.filter((s) => typeof s === "string" && s.trim() !== "")
+          : [];
+      }
     }
 
     if (typeof isActive === "boolean") {
@@ -613,23 +643,24 @@ exports.toggleReportTypeStatus = async (req, res) => {
 
     // Verificar permissões baseado no tipo
     if (existingType.isCustom === true) {
-      // Tipo personalizado: apenas prefeitos e super admins podem desativar
-      if (!req.admin.isMayor && !req.admin.isSuperAdmin) {
+      // Super Admin: pode ativar/desativar TODOS os tipos personalizados (criados por prefeitos, secretarias, etc.)
+      // Prefeitos: podem ativar/desativar todos os tipos personalizados da sua cidade
+      // Secretarias: podem ativar/desativar apenas tipos que criaram ou que estão em allowedSecretarias
+      const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+      const isAuthorizedSecretaria = 
+        !req.admin.isMayor && 
+        !req.admin.isSuperAdmin && 
+        secretariaId &&
+        existingType.allowedSecretarias?.includes(secretariaId);
+
+      if (!req.admin.isMayor && !req.admin.isSuperAdmin && !isAuthorizedSecretaria) {
         return res.status(403).json({
-          message: "Acesso negado. Apenas prefeitos e super administradores podem desativar tipos personalizados.",
+          message: "Acesso negado. Apenas prefeitos, super administradores e secretarias autorizadas podem ativar/desativar tipos personalizados.",
         });
       }
 
-      // Prefeito só pode desativar os que criou
-      if (
-        req.admin.isMayor &&
-        !req.admin.isSuperAdmin &&
-        existingType.createdBy?.adminId?.toString() !== req.admin.userId?.toString()
-      ) {
-        return res.status(403).json({
-          message: "Acesso negado. Você só pode desativar tipos que você criou.",
-        });
-      }
+      // Prefeitos podem desativar todos os tipos personalizados (não apenas os que criaram)
+      // Não precisa de verificação adicional para prefeitos
 
       // Verificar se prefeito tem acesso à cidade
       if (req.admin.isMayor && !req.admin.isSuperAdmin) {
@@ -640,11 +671,21 @@ exports.toggleReportTypeStatus = async (req, res) => {
         }
       }
     } else {
-      // Tipo padrão: apenas super admin pode desativar
-      if (!req.admin.isSuperAdmin) {
+      // Tipo padrão: Super admins e prefeitos podem ativar/desativar tipos padrão
+      // Secretarias NÃO podem ativar/desativar tipos padrão
+      if (!req.admin.isSuperAdmin && !req.admin.isMayor) {
         return res.status(403).json({
-          message: "Acesso negado. Apenas super administradores podem desativar tipos padrão.",
+          message: "Acesso negado. Apenas super administradores e prefeitos podem ativar/desativar tipos padrão.",
         });
+      }
+
+      // Verificar se prefeito tem acesso à cidade (se não for super admin)
+      if (req.admin.isMayor && !req.admin.isSuperAdmin) {
+        if (!req.admin.allowedCities?.includes(cityId)) {
+          return res.status(403).json({
+            message: "Acesso negado. Você só pode ativar/desativar tipos da sua cidade.",
+          });
+        }
       }
     }
 
@@ -711,23 +752,25 @@ exports.deactivateMultipleReportTypes = async (req, res) => {
 
       // Verificar permissões
       if (existingType.isCustom === true) {
-        // Tipo personalizado
-        if (!req.admin.isMayor && !req.admin.isSuperAdmin) {
+        // Tipo personalizado: prefeitos, super admins e secretarias autorizadas podem desativar
+        const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+        const isAuthorizedSecretaria = 
+          !req.admin.isMayor && 
+          !req.admin.isSuperAdmin && 
+          secretariaId &&
+          existingType.allowedSecretarias?.includes(secretariaId);
+
+        if (!req.admin.isMayor && !req.admin.isSuperAdmin && !isAuthorizedSecretaria) {
           errors.push(`Sem permissão para desativar ${existingType.label}`);
           continue;
         }
 
-        if (
-          req.admin.isMayor &&
-          !req.admin.isSuperAdmin &&
-          existingType.createdBy?.adminId?.toString() !== req.admin.userId?.toString()
-        ) {
-          errors.push(`Sem permissão para desativar ${existingType.label} (não foi criado por você)`);
-          continue;
-        }
+        // Prefeitos podem desativar todos os tipos personalizados (não apenas os que criaram)
+        // Não precisa de verificação adicional para prefeitos
       } else {
-        // Tipo padrão: apenas super admin
-        if (!req.admin.isSuperAdmin) {
+        // Tipo padrão: Super admins e prefeitos podem desativar tipos padrão
+        // Secretarias NÃO podem desativar tipos padrão
+        if (!req.admin.isSuperAdmin && !req.admin.isMayor) {
           errors.push(`Sem permissão para desativar tipo padrão ${existingType.label}`);
           continue;
         }
@@ -796,23 +839,25 @@ exports.activateMultipleReportTypes = async (req, res) => {
 
       // Verificar permissões
       if (existingType.isCustom === true) {
-        // Tipo personalizado
-        if (!req.admin.isMayor && !req.admin.isSuperAdmin) {
+        // Tipo personalizado: prefeitos, super admins e secretarias autorizadas podem ativar
+        const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+        const isAuthorizedSecretaria = 
+          !req.admin.isMayor && 
+          !req.admin.isSuperAdmin && 
+          secretariaId &&
+          existingType.allowedSecretarias?.includes(secretariaId);
+
+        if (!req.admin.isMayor && !req.admin.isSuperAdmin && !isAuthorizedSecretaria) {
           errors.push(`Sem permissão para ativar ${existingType.label}`);
           continue;
         }
 
-        if (
-          req.admin.isMayor &&
-          !req.admin.isSuperAdmin &&
-          existingType.createdBy?.adminId?.toString() !== req.admin.userId?.toString()
-        ) {
-          errors.push(`Sem permissão para ativar ${existingType.label} (não foi criado por você)`);
-          continue;
-        }
+        // Prefeitos podem ativar todos os tipos personalizados (não apenas os que criaram)
+        // Não precisa de verificação adicional para prefeitos
       } else {
-        // Tipo padrão: apenas super admin
-        if (!req.admin.isSuperAdmin) {
+        // Tipo padrão: Super admins e prefeitos podem ativar tipos padrão
+        // Secretarias NÃO podem ativar tipos padrão
+        if (!req.admin.isSuperAdmin && !req.admin.isMayor) {
           errors.push(`Sem permissão para ativar tipo padrão ${existingType.label}`);
           continue;
         }
@@ -836,6 +881,83 @@ exports.activateMultipleReportTypes = async (req, res) => {
     });
   } catch (error) {
     console.error("Erro ao ativar múltiplos tipos:", error);
+    res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+// Deletar tipo de report (padrão ou personalizado)
+exports.deleteReportType = async (req, res) => {
+  try {
+    const { id: cityId, typeId } = req.params;
+
+    // Verificar se é admin
+    if (!req.admin) {
+      return res.status(401).json({
+        message: "Acesso negado. Autenticação necessária.",
+      });
+    }
+
+    const city = await City.findOne({ id: cityId });
+
+    if (!city) {
+      return res.status(404).json({ message: "Cidade não encontrada." });
+    }
+
+    const reportTypes = city.modules?.reports?.reportTypes || [];
+    const typeIndex = reportTypes.findIndex((t) => t.id === typeId);
+
+    if (typeIndex === -1) {
+      return res.status(404).json({
+        message: "Tipo não encontrado.",
+      });
+    }
+
+    const existingType = reportTypes[typeIndex];
+
+    // Verificar permissões baseado no tipo
+    if (existingType.isCustom === true) {
+      // Tipo personalizado: super admins, prefeitos e secretarias que criaram podem deletar
+      const secretariaId = req.admin.secretaria?.id || req.admin.secretaria;
+      const isAuthorizedSecretaria = 
+        !req.admin.isMayor && 
+        !req.admin.isSuperAdmin && 
+        secretariaId &&
+        existingType.createdBy?.adminId?.toString() === req.admin.userId?.toString();
+
+      if (!req.admin.isMayor && !req.admin.isSuperAdmin && !isAuthorizedSecretaria) {
+        return res.status(403).json({
+          message: "Acesso negado. Apenas super administradores, prefeitos e secretarias que criaram o tipo podem deletá-lo.",
+        });
+      }
+    } else {
+      // Tipo padrão: Super admins e prefeitos podem deletar TODOS os tipos padrão
+      // Secretarias NÃO podem deletar tipos padrão
+      if (!req.admin.isSuperAdmin && !req.admin.isMayor) {
+        return res.status(403).json({
+          message: "Acesso negado. Apenas super administradores e prefeitos podem deletar tipos padrão.",
+        });
+      }
+    }
+
+    // Verificar se prefeito tem acesso à cidade (se não for super admin)
+    if (req.admin.isMayor && !req.admin.isSuperAdmin) {
+      if (!req.admin.allowedCities?.includes(cityId)) {
+        return res.status(403).json({
+          message: "Acesso negado. Você só pode deletar tipos da sua cidade.",
+        });
+      }
+    }
+
+    // Remover o tipo do array
+    reportTypes.splice(typeIndex, 1);
+
+    await city.save();
+
+    res.status(200).json({
+      message: "Tipo deletado com sucesso.",
+    });
+  } catch (error) {
+    console.error("Erro ao deletar tipo:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
   }
 };

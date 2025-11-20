@@ -28,7 +28,18 @@ function buildMatch(cityId, range = {}, allowedReportTypes = null) {
   const match = { "city.id": cityId };
 
   // Filtrar por reportTypes se houver restrição de secretaria
-  if (allowedReportTypes && allowedReportTypes.length > 0) {
+  // Se allowedReportTypes é um array vazio [], significa que não há tipos associados
+  // e devemos aplicar um filtro que não retorna nada (usando um ID inexistente)
+  if (Array.isArray(allowedReportTypes)) {
+    if (allowedReportTypes.length === 0) {
+      // Array vazio: não mostrar nada (filtrar por um ID que não existe)
+      match.reportType = { $in: ["__NO_REPORTS__"] };
+    } else {
+      // Array com tipos: filtrar por esses tipos
+      match.reportType = { $in: allowedReportTypes };
+    }
+  } else if (allowedReportTypes && allowedReportTypes.length > 0) {
+    // Fallback para compatibilidade (caso não seja array)
     match.reportType = { $in: allowedReportTypes };
   }
 
@@ -123,7 +134,6 @@ async function resolveCityContext(req, res) {
  * Se for prefeito e tiver secretariaId no query, filtra por essa secretaria
  */
 async function getAllowedReportTypes(cityId, admin, secretariaId = null) {
-  console.log(`🔍 getAllowedReportTypes - cityId: ${cityId}, isMayor: ${admin.isMayor}, isSuperAdmin: ${admin.isSuperAdmin}, secretariaId: ${secretariaId}`);
   
   // Super admins não têm filtro de reportTypes
   if (admin.isSuperAdmin) {
@@ -132,30 +142,81 @@ async function getAllowedReportTypes(cityId, admin, secretariaId = null) {
 
   // Prefeitos podem filtrar por secretaria específica se fornecido
   if (admin.isMayor && secretariaId) {
-    console.log(`🏛️ Prefeito filtrando por secretaria: ${secretariaId}`);
     const city = await City.findOne({ id: cityId }).select("secretarias modules.reports.reportTypes");
     if (!city) {
-      console.log(`❌ Cidade não encontrada: ${cityId}`);
       return null;
     }
 
     const secretaria = city.secretarias?.find((s) => s.id === secretariaId);
     if (!secretaria) {
-      console.log(`❌ Secretaria não encontrada: ${secretariaId}`);
       return null;
     }
 
-    console.log(`✅ Secretaria encontrada com ${secretaria.reportTypes?.length || 0} reportTypes`);
-    return secretaria.reportTypes || [];
+    // Buscar todos os reportTypes da cidade
+    const allReportTypes = city.modules?.reports?.reportTypes || [];
+    
+    // Coletar IDs de reportTypes associados à secretaria de três formas:
+    // 1. Tipos diretamente associados na secretaria (campo reportTypes da secretaria)
+    // 2. Tipos que têm a secretaria em allowedSecretarias
+    // 3. Tipos que têm o campo secretaria igual ao secretariaId (tipos padrão associados)
+    const associatedTypeIds = new Set();
+    
+    // Adicionar tipos diretamente associados
+    if (secretaria.reportTypes && Array.isArray(secretaria.reportTypes)) {
+      secretaria.reportTypes.forEach(typeId => {
+        if (typeId && typeof typeId === 'string') {
+          associatedTypeIds.add(typeId);
+        }
+      });
+    }
+    
+    // Adicionar tipos que têm a secretaria em allowedSecretarias OU campo secretaria igual ao secretariaId
+    // Usar a mesma lógica que é usada para secretários: incluir tipos padrão e tipos personalizados associados
+    allReportTypes.forEach(type => {
+      // Apenas tipos ativos
+      if (type.isActive === false) return;
+      
+      const isCustom = type.isCustom === true;
+      const isStandard = !type.isCustom || type.isCustom === false;
+      
+      // Tipos padrão sempre permitidos (mesma lógica para secretários)
+      if (isStandard) {
+        associatedTypeIds.add(type.id);
+        return;
+      }
+      
+      // Tipos personalizados: verificar se está em allowedSecretarias
+      if (isCustom) {
+        if (type.allowedSecretarias && Array.isArray(type.allowedSecretarias)) {
+          if (type.allowedSecretarias.includes(secretariaId)) {
+            associatedTypeIds.add(type.id);
+          }
+        }
+      }
+      
+      // Verificar se o campo secretaria do tipo é igual ao secretariaId (para tipos padrão)
+      if (type.secretaria && type.secretaria === secretariaId) {
+        associatedTypeIds.add(type.id);
+      }
+    });
+    
+    const result = Array.from(associatedTypeIds);
+    
+    // Se não há tipos associados, retornar array vazio para não mostrar nada
+    // Quando um prefeito seleciona uma secretaria, devemos mostrar apenas os dados dessa secretaria
+    if (result.length === 0) {
+      return [];
+    }
+    
+    return result;
   }
 
   // Prefeitos sem filtro de secretaria não têm restrição
   if (admin.isMayor) {
-    console.log(`👑 Prefeito sem filtro de secretaria - retornando null (sem filtro)`);
     return null; // Sem filtro
   }
 
-  // Admins de secretaria têm filtro automático pela sua secretaria
+  // Admins de secretaria: filtrar apenas pelos reportTypes que criou OU que estão em allowedSecretarias
   if (!admin.secretaria) {
     return null;
   }
@@ -165,22 +226,47 @@ async function getAllowedReportTypes(cityId, admin, secretariaId = null) {
     return null;
   }
 
-  const secretaria = city.secretarias?.find((s) => s.id === admin.secretaria);
-  if (!secretaria) {
+  // secretariaId é parâmetro da função, usar nome diferente
+  const adminSecretariaId = admin.secretaria?.id || admin.secretaria;
+  const allReportTypes = city.modules?.reports?.reportTypes || [];
+  
+  // Filtrar tipos que a secretaria criou OU que estão em allowedSecretarias
+  const allowedTypes = allReportTypes
+    .filter((type) => {
+      // Apenas tipos ativos
+      if (type.isActive === false) return false;
+      
+      // Tipos padrão sempre permitidos
+      if (!type.isCustom || type.isCustom === false) return true;
+      
+      // Tipos personalizados: verificar se criou ou se está em allowedSecretarias
+      if (type.isCustom === true) {
+        // Se criou, pode ver
+        if (type.createdBy?.adminId?.toString() === admin.userId?.toString()) {
+          return true;
+        }
+        // Se está em allowedSecretarias, pode ver
+        if (type.allowedSecretarias?.includes(adminSecretariaId)) {
+          return true;
+        }
+      }
+      return false;
+    })
+    .map((type) => type.id);
+
+  if (allowedTypes.length === 0) {
     return null;
   }
 
-  return secretaria.reportTypes || [];
+  return allowedTypes;
 }
 
 exports.getOverview = async (req, res) => {
   try {
-    console.log(`📊 getOverview - admin.isMayor: ${req.admin?.isMayor}, admin.isSuperAdmin: ${req.admin?.isSuperAdmin}, admin.allowedCities:`, req.admin?.allowedCities);
     const cityId = await resolveCityContext(req, res);
     if (!cityId) return;
 
     const { startDate, endDate, secretariaId } = req.query;
-    console.log(`📊 getOverview - cityId: ${cityId}, secretariaId: ${secretariaId}`);
 
     const range = resolveDateRange(startDate, endDate);
     
@@ -193,6 +279,7 @@ exports.getOverview = async (req, res) => {
     last7DaysStart.setDate(last7DaysStart.getDate() - 6);
     last7DaysStart.setUTCHours(0, 0, 0, 0);
 
+    
     const [statusAggregation, engagementAggregation, createdInPeriodCount, recentActivity] =
       await Promise.all([
         Report.aggregate([
@@ -482,8 +569,14 @@ exports.getMapData = async (req, res) => {
 
     // Filtrar por secretaria se não for super admin
     const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
-    if (allowedReportTypes && allowedReportTypes.length > 0) {
-      match.reportType = { $in: allowedReportTypes };
+    if (Array.isArray(allowedReportTypes)) {
+      if (allowedReportTypes.length === 0) {
+        // Array vazio: não mostrar nada (filtrar por um ID que não existe)
+        match.reportType = { $in: ["__NO_REPORTS__"] };
+      } else {
+        // Array com tipos: filtrar por esses tipos
+        match.reportType = { $in: allowedReportTypes };
+      }
     } else if (reportType) {
       match.reportType = reportType;
     }
@@ -619,8 +712,14 @@ exports.getReportStatusOptions = async (req, res) => {
     
     // Filtrar por secretaria se não for super admin
     const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
-    if (allowedReportTypes && allowedReportTypes.length > 0) {
-      match.reportType = { $in: allowedReportTypes };
+    if (Array.isArray(allowedReportTypes)) {
+      if (allowedReportTypes.length === 0) {
+        // Array vazio: não mostrar nada (filtrar por um ID que não existe)
+        match.reportType = { $in: ["__NO_REPORTS__"] };
+      } else {
+        // Array com tipos: filtrar por esses tipos
+        match.reportType = { $in: allowedReportTypes };
+      }
     }
 
     const statuses = await Report.distinct("status", match);
@@ -660,8 +759,14 @@ exports.getReportsList = async (req, res) => {
 
     // Filtrar por secretaria se não for super admin
     const allowedReportTypes = await getAllowedReportTypes(cityId, req.admin, secretariaId);
-    if (allowedReportTypes && allowedReportTypes.length > 0) {
-      filter.reportType = { $in: allowedReportTypes };
+    if (Array.isArray(allowedReportTypes)) {
+      if (allowedReportTypes.length === 0) {
+        // Array vazio: não mostrar nada (filtrar por um ID que não existe)
+        filter.reportType = { $in: ["__NO_REPORTS__"] };
+      } else {
+        // Array com tipos: filtrar por esses tipos
+        filter.reportType = { $in: allowedReportTypes };
+      }
     }
 
     if (status && status !== "all") {

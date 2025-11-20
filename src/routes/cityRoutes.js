@@ -15,6 +15,7 @@ const {
   toggleReportTypeStatus,
   deactivateMultipleReportTypes,
   activateMultipleReportTypes,
+  deleteReportType,
 } = require("../controllers/cityController");
 
 const { paginationMiddleware } = require("../middlewares/paginationMiddleware");
@@ -67,5 +68,8 @@ router.post("/report-types/:id/deactivate-multiple", isAdmin, deactivateMultiple
 
 // Ativar múltiplos tipos
 router.post("/report-types/:id/activate-multiple", isAdmin, activateMultipleReportTypes);
+
+// Deletar tipo (padrão ou personalizado)
+router.delete("/report-types/:id/:typeId", isAdmin, deleteReportType);
 
 module.exports = router;

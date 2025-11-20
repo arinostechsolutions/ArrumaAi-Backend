@@ -38,7 +38,16 @@ function buildMatch(cityId, range = {}, allowedReportTypes = null, bairro = null
   // Caso contrário, usar allowedReportTypes se disponível
   if (reportType) {
     match.reportType = reportType;
+  } else if (Array.isArray(allowedReportTypes)) {
+    if (allowedReportTypes.length === 0) {
+      // Array vazio: não mostrar nada (filtrar por um ID que não existe)
+      match.reportType = { $in: ["__NO_REPORTS__"] };
+    } else {
+      // Array com tipos: filtrar por esses tipos
+      match.reportType = { $in: allowedReportTypes };
+    }
   } else if (allowedReportTypes && allowedReportTypes.length > 0) {
+    // Fallback para compatibilidade (caso não seja array)
     match.reportType = { $in: allowedReportTypes };
   }
 
@@ -64,31 +73,115 @@ async function getAllowedReportTypes(cityId, admin, secretariaId = null) {
     // Prefeito pode filtrar por secretaria se especificado
     if (secretariaId) {
       const City = require("../models/City");
-      const city = await City.findOne({ id: cityId });
-      if (!city) return null;
-
-      const secretaria = city.secretarias?.find((s) => s.id === secretariaId);
-      if (!secretaria || !secretaria.reportTypes || secretaria.reportTypes.length === 0) {
+      const city = await City.findOne({ id: cityId }).select("secretarias modules.reports.reportTypes");
+      if (!city) {
         return null;
       }
 
-      return secretaria.reportTypes;
+      const secretaria = city.secretarias?.find((s) => s.id === secretariaId);
+      if (!secretaria) {
+        return null;
+      }
+
+      // Buscar todos os reportTypes da cidade
+      const allReportTypes = city.modules?.reports?.reportTypes || [];
+      
+      // Coletar IDs de reportTypes associados à secretaria de três formas:
+      // 1. Tipos diretamente associados na secretaria (campo reportTypes da secretaria)
+      // 2. Tipos que têm a secretaria em allowedSecretarias
+      // 3. Tipos que têm o campo secretaria igual ao secretariaId (tipos padrão associados)
+      const associatedTypeIds = new Set();
+      
+      // Adicionar tipos diretamente associados
+      if (secretaria.reportTypes && Array.isArray(secretaria.reportTypes)) {
+        secretaria.reportTypes.forEach(typeId => {
+          if (typeId && typeof typeId === 'string') {
+            associatedTypeIds.add(typeId);
+          }
+        });
+      }
+      
+      // Adicionar tipos que têm a secretaria em allowedSecretarias OU campo secretaria igual ao secretariaId
+      // Usar a mesma lógica que é usada para secretários: incluir tipos padrão e tipos personalizados associados
+      allReportTypes.forEach(type => {
+        // Apenas tipos ativos
+        if (type.isActive === false) return;
+        
+        const isCustom = type.isCustom === true;
+        const isStandard = !type.isCustom || type.isCustom === false;
+        
+        // Tipos padrão sempre permitidos (mesma lógica para secretários)
+        if (isStandard) {
+          associatedTypeIds.add(type.id);
+          return;
+        }
+        
+        // Tipos personalizados: verificar se está em allowedSecretarias
+        if (isCustom) {
+          if (type.allowedSecretarias && Array.isArray(type.allowedSecretarias)) {
+            if (type.allowedSecretarias.includes(secretariaId)) {
+              associatedTypeIds.add(type.id);
+            }
+          }
+        }
+        
+        // Verificar se o campo secretaria do tipo é igual ao secretariaId (para tipos padrão)
+        if (type.secretaria && type.secretaria === secretariaId) {
+          associatedTypeIds.add(type.id);
+        }
+      });
+      
+      const result = Array.from(associatedTypeIds);
+      
+      // Se não há tipos associados, retornar array vazio para não mostrar nada
+      // Quando um prefeito seleciona uma secretaria, devemos mostrar apenas os dados dessa secretaria
+      if (result.length === 0) {
+        return [];
+      }
+      
+      return result;
     }
     return null; // Sem filtro se não especificar secretaria
   }
 
-  // Admin de secretaria: filtrar apenas pelos reportTypes da sua secretaria
+  // Admin de secretaria: filtrar apenas pelos reportTypes que criou OU que estão em allowedSecretarias
   if (admin.secretaria) {
     const City = require("../models/City");
     const city = await City.findOne({ id: cityId });
     if (!city) return null;
 
-    const secretaria = city.secretarias?.find((s) => s.id === admin.secretaria);
-    if (!secretaria || !secretaria.reportTypes || secretaria.reportTypes.length === 0) {
+    const secretariaId = admin.secretaria?.id || admin.secretaria;
+    const allReportTypes = city.modules?.reports?.reportTypes || [];
+    
+    // Filtrar tipos que a secretaria criou OU que estão em allowedSecretarias
+    const allowedTypes = allReportTypes
+      .filter((type) => {
+        // Apenas tipos ativos
+        if (type.isActive === false) return false;
+        
+        // Tipos padrão sempre permitidos
+        if (!type.isCustom || type.isCustom === false) return true;
+        
+        // Tipos personalizados: verificar se criou ou se está em allowedSecretarias
+        if (type.isCustom === true) {
+          // Se criou, pode ver
+          if (type.createdBy?.adminId?.toString() === admin.userId?.toString()) {
+            return true;
+          }
+          // Se está em allowedSecretarias, pode ver
+          if (type.allowedSecretarias?.includes(secretariaId)) {
+            return true;
+          }
+        }
+        return false;
+      })
+      .map((type) => type.id);
+
+    if (allowedTypes.length === 0) {
       return null;
     }
 
-    return secretaria.reportTypes;
+    return allowedTypes;
   }
 
   return null;

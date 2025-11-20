@@ -61,7 +61,7 @@ const CitySchema = new mongoose.Schema(
             createdBy: {
               adminId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
               adminName: { type: String },
-              role: { type: String, enum: ["super_admin", "mayor"], default: "mayor" },
+              role: { type: String, enum: ["super_admin", "mayor", "secretaria"], default: "mayor" },
             },
             allowedSecretarias: [{ type: String }], // IDs das secretarias que podem usar este tipo
             isActive: { type: Boolean, default: true }, // Para soft delete
