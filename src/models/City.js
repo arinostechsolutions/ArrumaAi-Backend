@@ -8,6 +8,7 @@ const CitySchema = new mongoose.Schema(
 
     modules: {
       healthAppointments: {
+        enabled: { type: Boolean, default: false },
         healthServices: [
           {
             id: { type: String, required: true },
@@ -44,6 +45,7 @@ const CitySchema = new mongoose.Schema(
       },
 
       iptu: {
+        enabled: { type: Boolean, default: false },
         paymentURL: { type: String, required: false },
         queryMethods: [
           { type: String, enum: ["CPF", "CNPJ", "INSCRICAO"], required: true },
@@ -102,6 +104,8 @@ const CitySchema = new mongoose.Schema(
     mobileConfig: {
       showFeed: { type: Boolean, default: true },
       showMap: { type: Boolean, default: true },
+      showHealthAppointments: { type: Boolean, default: false },
+      showEvents: { type: Boolean, default: false },
     },
   },
   { timestamps: true, collection: "cities" }

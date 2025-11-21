@@ -72,6 +72,24 @@ exports.getCityById = async (req, res) => {
       city.modules.reports.reportTypes = activeTypes;
     }
 
+    // Filtrar menu baseado em módulos habilitados (apenas para mobile)
+    if (!isAdminRequest && city.menu && Array.isArray(city.menu)) {
+      const healthAppointmentsEnabled = city.modules?.healthAppointments?.enabled === true;
+      
+      const eventsEnabled = city.mobileConfig?.showEvents === true;
+      
+      // Remover itens do menu se os módulos não estiverem habilitados
+      city.menu = city.menu.filter((item) => {
+        if (item.id === "health") {
+          return healthAppointmentsEnabled;
+        }
+        if (item.id === "events") {
+          return eventsEnabled;
+        }
+        return true; // Manter outros itens do menu
+      });
+    }
+
     res.status(200).json(city);
   } catch (error) {
     console.error("Erro ao buscar cidade por ID:", error);
@@ -203,7 +221,7 @@ exports.getMobileConfig = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const city = await City.findOne({ id }).select("mobileConfig");
+    const city = await City.findOne({ id }).select("mobileConfig modules.healthAppointments.enabled modules.iptu.enabled");
 
     if (!city) {
       return res.status(404).json({ message: "Cidade não encontrada." });
@@ -215,7 +233,17 @@ exports.getMobileConfig = async (req, res) => {
       showMap: true,
     };
 
-    res.status(200).json(mobileConfig);
+    // Incluir showHealthAppointments, showEvents e showIptu baseado nos módulos
+    const healthAppointmentsEnabled = city.modules?.healthAppointments?.enabled || false;
+    const eventsEnabled = city.mobileConfig?.showEvents || false;
+    const iptuEnabled = city.modules?.iptu?.enabled || false;
+
+    res.status(200).json({
+      ...mobileConfig,
+      showHealthAppointments: healthAppointmentsEnabled,
+      showEvents: eventsEnabled,
+      showIptu: iptuEnabled,
+    });
   } catch (error) {
     console.error("Erro ao buscar configuração mobile:", error);
     res.status(500).json({ message: "Erro interno do servidor." });
@@ -226,7 +254,7 @@ exports.getMobileConfig = async (req, res) => {
 exports.updateMobileConfig = async (req, res) => {
   try {
     const { id } = req.params;
-    const { showFeed, showMap } = req.body;
+    const { showFeed, showMap, showHealthAppointments, showEvents, showIptu } = req.body;
 
     // Verificar se é prefeito ou super admin
     if (!req.admin) {
@@ -266,12 +294,38 @@ exports.updateMobileConfig = async (req, res) => {
     if (typeof showMap === "boolean") {
       updateData["mobileConfig.showMap"] = showMap;
     }
+    if (typeof showHealthAppointments === "boolean") {
+      updateData["modules.healthAppointments.enabled"] = showHealthAppointments;
+    }
+    if (typeof showEvents === "boolean") {
+      updateData["mobileConfig.showEvents"] = showEvents;
+    }
+    if (typeof showIptu === "boolean") {
+      updateData["modules.iptu.enabled"] = showIptu;
+    }
 
     // Se mobileConfig não existir, criar com valores padrão
     if (!city.mobileConfig) {
       updateData["mobileConfig"] = {
         showFeed: typeof showFeed === "boolean" ? showFeed : true,
         showMap: typeof showMap === "boolean" ? showMap : true,
+      };
+    }
+
+    // Se módulo healthAppointments não existir, inicializar
+    if (!city.modules?.healthAppointments) {
+      updateData["modules.healthAppointments"] = {
+        enabled: typeof showHealthAppointments === "boolean" ? showHealthAppointments : false,
+        healthServices: [],
+      };
+    }
+
+    // Se módulo iptu não existir, inicializar
+    if (!city.modules?.iptu) {
+      updateData["modules.iptu"] = {
+        enabled: typeof showIptu === "boolean" ? showIptu : false,
+        paymentURL: "",
+        queryMethods: [],
       };
     }
 
@@ -290,9 +344,18 @@ exports.updateMobileConfig = async (req, res) => {
       showMap: true,
     };
 
+    const healthAppointmentsEnabled = updatedCity.modules?.healthAppointments?.enabled || false;
+    const eventsEnabled = updatedCity.mobileConfig?.showEvents || false;
+    const iptuEnabled = updatedCity.modules?.iptu?.enabled || false;
+
     res.status(200).json({
       message: "Configuração mobile atualizada com sucesso!",
-      mobileConfig,
+      mobileConfig: {
+        ...mobileConfig,
+        showHealthAppointments: healthAppointmentsEnabled,
+        showEvents: eventsEnabled,
+        showIptu: iptuEnabled,
+      },
     });
   } catch (error) {
     console.error("Erro ao atualizar configuração mobile:", error);

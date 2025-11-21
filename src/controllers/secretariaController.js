@@ -31,10 +31,10 @@ exports.createSecretaria = async (req, res) => {
     }
 
     // Validar formato do ID (deve ser slug válido)
-    const idRegex = /^[a-z0-9_]+$/;
+    const idRegex = /^[a-z0-9_-]+$/;
     if (!idRegex.test(id)) {
       return res.status(400).json({
-        message: "ID da secretaria deve conter apenas letras minúsculas, números e underscore.",
+        message: "ID da secretaria deve conter apenas letras minúsculas, números, traços e underscore.",
       });
     }
 
