@@ -323,7 +323,12 @@ exports.getRemainingAppointments = async (req, res) => {
       });
 
       const remainingSlots = Math.max(shiftLimit - existingAppointments, 0);
-      availability[date] = remainingSlots;
+      availability[date] = {
+        remaining: remainingSlots,
+        total: shiftLimit,
+        booked: existingAppointments,
+        available: remainingSlots > 0,
+      };
     }
 
     res.status(200).json(availability);
