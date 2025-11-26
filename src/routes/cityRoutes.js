@@ -38,8 +38,8 @@ router.delete("/deleteCity/:id", deleteCity);
 // Atualizar tipos de denúncias da cidade
 router.put("/updateReportTypesByCity/:id", updateReportTypesByCity);
 
-// Atualizar menu da cidade
-router.put("/updateMenuByCity/:id", updateMenuByCity);
+// Atualizar menu da cidade (apenas super admins)
+router.put("/updateMenuByCity/:id", isAdmin, updateMenuByCity);
 
 // Atualizar módulos da cidade
 router.put("/updateModulesByCity/:id", updateModulesByCity);

@@ -18,3 +18,6 @@ router.delete("/:cityId/:serviceId/:specialtyId", isAdmin, deleteSpecialty);
 
 module.exports = router;
 
+
+
+

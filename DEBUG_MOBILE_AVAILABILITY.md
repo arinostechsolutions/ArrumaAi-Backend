@@ -177,3 +177,6 @@ const availability = await response.json();
 - [ ] Verificar se há problema de timezone
 - [ ] Verificar se a requisição está sendo feita com os parâmetros corretos
 
+
+
+

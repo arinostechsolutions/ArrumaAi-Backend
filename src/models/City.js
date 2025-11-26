@@ -73,6 +73,52 @@ const CitySchema = new mongoose.Schema(
         ],
         reportList: [{ type: mongoose.Schema.Types.ObjectId, ref: "Report" }],
       },
+
+      smartCity: {
+        enabled: { type: Boolean, default: false },
+        // Configuração de quais tipos de POIs mostrar
+        poiTypes: {
+          showStreetBlockades: { type: Boolean, default: true }, // Interdições de ruas
+          showEvents: { type: Boolean, default: true }, // Eventos
+          showHealthUnits: { type: Boolean, default: true }, // Unidades de saúde
+          showCustomPOIs: { type: Boolean, default: true }, // POIs personalizados
+          showEmergencyContacts: { type: Boolean, default: true }, // Telefones de emergência
+        },
+        // POIs personalizados (ponto de interesse)
+        customPOIs: [
+          {
+            id: { type: String, required: true },
+            name: { type: String, required: true },
+            description: { type: String },
+            type: { 
+              type: String, 
+              enum: ["hospital", "escola", "biblioteca", "parque", "praca", "outro"],
+              required: true 
+            },
+            location: {
+              lat: { type: Number, required: true },
+              lng: { type: Number, required: true },
+            },
+            address: { type: String },
+            phone: { type: String },
+            email: { type: String },
+            website: { type: String },
+            iconName: { type: String, default: "location" }, // Nome do ícone
+            iconColor: { type: String, default: "#007AFF" }, // Cor do ícone
+            isActive: { type: Boolean, default: true },
+            createdBy: {
+              adminId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+              adminName: { type: String },
+            },
+            createdAt: { type: Date, default: Date.now },
+            updatedAt: { type: Date, default: Date.now },
+          },
+        ],
+      },
+
+      emergencies: {
+        enabled: { type: Boolean, default: false },
+      },
     },
 
     // 🏛️ Secretarias da cidade
@@ -106,6 +152,9 @@ const CitySchema = new mongoose.Schema(
       showMap: { type: Boolean, default: true },
       showHealthAppointments: { type: Boolean, default: false },
       showEvents: { type: Boolean, default: false },
+      showSmartCity: { type: Boolean, default: false },
+      showEmergencies: { type: Boolean, default: false },
+      showNews: { type: Boolean, default: false },
     },
   },
   { timestamps: true, collection: "cities" }

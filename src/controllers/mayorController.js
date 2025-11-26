@@ -126,3 +126,6 @@ exports.registerMayor = async (req, res) => {
 
 
 
+
+
+
