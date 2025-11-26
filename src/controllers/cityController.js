@@ -75,8 +75,9 @@ exports.getCityById = async (req, res) => {
     // Filtrar menu baseado em módulos habilitados (apenas para mobile)
     if (!isAdminRequest && city.menu && Array.isArray(city.menu)) {
       const healthAppointmentsEnabled = city.modules?.healthAppointments?.enabled === true;
-      
       const eventsEnabled = city.mobileConfig?.showEvents === true;
+      const iptuEnabled = city.modules?.iptu?.enabled === true;
+      const smartCityEnabled = city.mobileConfig?.showSmartCity === true;
       
       // Remover itens do menu se os módulos não estiverem habilitados
       city.menu = city.menu.filter((item) => {
@@ -85,6 +86,12 @@ exports.getCityById = async (req, res) => {
         }
         if (item.id === "events") {
           return eventsEnabled;
+        }
+        if (item.id === "iptu") {
+          return iptuEnabled;
+        }
+        if (item.id === "smartCity" || item.id === "cidade-inteligente") {
+          return smartCityEnabled;
         }
         return true; // Manter outros itens do menu
       });
@@ -97,9 +104,16 @@ exports.getCityById = async (req, res) => {
   }
 };
 
-// Atualizar o menu de uma cidade
+// Atualizar o menu de uma cidade (apenas super admins)
 exports.updateMenuByCity = async (req, res) => {
   try {
+    // Verificar se é super admin
+    if (!req.admin?.isSuperAdmin) {
+      return res.status(403).json({
+        message: "Apenas super administradores podem alterar a ordem do menu.",
+      });
+    }
+
     const { id } = req.params;
     const { menu } = req.body;
 
@@ -221,7 +235,7 @@ exports.getMobileConfig = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const city = await City.findOne({ id }).select("mobileConfig modules.healthAppointments.enabled modules.iptu.enabled");
+    const city = await City.findOne({ id }).select("mobileConfig modules.healthAppointments.enabled modules.iptu.enabled modules.smartCity.enabled modules.emergencies.enabled");
 
     if (!city) {
       return res.status(404).json({ message: "Cidade não encontrada." });
@@ -233,16 +247,22 @@ exports.getMobileConfig = async (req, res) => {
       showMap: true,
     };
 
-    // Incluir showHealthAppointments, showEvents e showIptu baseado nos módulos
+    // Incluir showHealthAppointments, showEvents, showIptu, showSmartCity e showEmergencies baseado nos módulos
     const healthAppointmentsEnabled = city.modules?.healthAppointments?.enabled || false;
     const eventsEnabled = city.mobileConfig?.showEvents || false;
     const iptuEnabled = city.modules?.iptu?.enabled || false;
+    const smartCityEnabled = city.mobileConfig?.showSmartCity || false;
+    const emergenciesEnabled = city.modules?.emergencies?.enabled || city.mobileConfig?.showEmergencies || false;
+    const newsEnabled = city.mobileConfig?.showNews || false;
 
     res.status(200).json({
       ...mobileConfig,
       showHealthAppointments: healthAppointmentsEnabled,
       showEvents: eventsEnabled,
       showIptu: iptuEnabled,
+      showSmartCity: smartCityEnabled,
+      showEmergencies: emergenciesEnabled,
+      showNews: newsEnabled,
     });
   } catch (error) {
     console.error("Erro ao buscar configuração mobile:", error);
@@ -254,7 +274,7 @@ exports.getMobileConfig = async (req, res) => {
 exports.updateMobileConfig = async (req, res) => {
   try {
     const { id } = req.params;
-    const { showFeed, showMap, showHealthAppointments, showEvents, showIptu } = req.body;
+    const { showFeed, showMap, showHealthAppointments, showEvents, showIptu, showSmartCity, showEmergencies, showNews } = req.body;
 
     // Verificar se é prefeito ou super admin
     if (!req.admin) {
@@ -303,6 +323,17 @@ exports.updateMobileConfig = async (req, res) => {
     if (typeof showIptu === "boolean") {
       updateData["modules.iptu.enabled"] = showIptu;
     }
+    if (typeof showSmartCity === "boolean") {
+      updateData["mobileConfig.showSmartCity"] = showSmartCity;
+      updateData["modules.smartCity.enabled"] = showSmartCity;
+    }
+    if (typeof showEmergencies === "boolean") {
+      updateData["mobileConfig.showEmergencies"] = showEmergencies;
+      updateData["modules.emergencies.enabled"] = showEmergencies;
+    }
+    if (typeof showNews === "boolean") {
+      updateData["mobileConfig.showNews"] = showNews;
+    }
 
     // Se mobileConfig não existir, criar com valores padrão
     if (!city.mobileConfig) {
@@ -329,6 +360,113 @@ exports.updateMobileConfig = async (req, res) => {
       };
     }
 
+    // Se módulo smartCity não existir, inicializar
+    if (!city.modules?.smartCity) {
+      updateData["modules.smartCity"] = {
+        enabled: typeof showSmartCity === "boolean" ? showSmartCity : false,
+        poiTypes: {
+          showStreetBlockades: true,
+          showEvents: true,
+          showHealthUnits: true,
+          showCustomPOIs: true,
+          showEmergencyContacts: true,
+        },
+        customPOIs: [],
+      };
+    }
+
+    // Se módulo emergencies não existir, inicializar
+    if (!city.modules?.emergencies) {
+      updateData["modules.emergencies"] = {
+        enabled: typeof showEmergencies === "boolean" ? showEmergencies : false,
+      };
+    }
+
+    // Se showSmartCity estiver sendo ativado e não existir item de menu, criar automaticamente
+    if (typeof showSmartCity === "boolean" && showSmartCity === true) {
+      const currentMenu = city.menu || [];
+      const smartCityMenuItemExists = currentMenu.some(
+        (item) => item.id === "smartCity" || item.id === "cidade-inteligente"
+      );
+
+      if (!smartCityMenuItemExists) {
+        const defaultSmartCityMenuItem = {
+          id: "smartCity",
+          label: "Cidade Inteligente",
+          bgColor: "#8B5CF6", // Cor roxa padrão
+          iconName: "map",
+          description: "Mapa interativo com pontos de interesse",
+        };
+
+        const updatedMenu = [...currentMenu, defaultSmartCityMenuItem];
+        updateData["menu"] = updatedMenu;
+      }
+    }
+
+    // Se showEmergencies estiver sendo ativado e não existir item de menu, criar automaticamente
+    if (typeof showEmergencies === "boolean" && showEmergencies === true) {
+      const currentMenu = city.menu || [];
+      const emergenciesMenuItemExists = currentMenu.some(
+        (item) => item.id === "emergencies" || item.id === "emergencias" || item.id === "emergencia"
+      );
+
+      if (!emergenciesMenuItemExists) {
+        const defaultEmergenciesMenuItem = {
+          id: "emergencies",
+          label: "Emergências",
+          bgColor: "#EF4444", // Cor vermelha padrão
+          iconName: "call",
+          description: "Telefones de emergência e serviços públicos",
+        };
+
+        const updatedMenu = [...currentMenu, defaultEmergenciesMenuItem];
+        updateData["menu"] = updatedMenu;
+      }
+    }
+
+    // Se showEmergencies estiver sendo desativado, remover item de menu
+    if (typeof showEmergencies === "boolean" && showEmergencies === false) {
+      const currentMenu = city.menu || [];
+      const updatedMenu = currentMenu.filter(
+        (item) => item.id !== "emergencies" && item.id !== "emergencias" && item.id !== "emergencia"
+      );
+      if (updatedMenu.length !== currentMenu.length) {
+        updateData["menu"] = updatedMenu;
+      }
+    }
+
+    // Se showNews estiver sendo ativado e não existir item de menu, criar automaticamente
+    if (typeof showNews === "boolean" && showNews === true) {
+      const currentMenu = city.menu || [];
+      const newsMenuItemExists = currentMenu.some(
+        (item) => item.id === "news" || item.id === "noticias" || item.id === "noticia"
+      );
+
+      if (!newsMenuItemExists) {
+        const defaultNewsMenuItem = {
+          id: "news",
+          label: "Notícias",
+          bgColor: "#3B82F6", // Cor azul padrão
+          iconName: "newspaper",
+          description: "Notícias e informações do município",
+        };
+
+        const updatedMenu = [...currentMenu, defaultNewsMenuItem];
+        updateData["menu"] = updatedMenu;
+      }
+    }
+
+    // Se showNews estiver sendo desativado, remover item de menu
+    if (typeof showNews === "boolean" && showNews === false) {
+      const currentMenu = city.menu || [];
+      const updatedMenu = currentMenu.filter(
+        (item) => item.id !== "news" && item.id !== "noticias" && item.id !== "noticia"
+      );
+      if (updatedMenu.length !== currentMenu.length) {
+        updateData["menu"] = updatedMenu;
+      }
+    }
+
     const updatedCity = await City.findOneAndUpdate(
       { id },
       { $set: updateData },
@@ -347,6 +485,9 @@ exports.updateMobileConfig = async (req, res) => {
     const healthAppointmentsEnabled = updatedCity.modules?.healthAppointments?.enabled || false;
     const eventsEnabled = updatedCity.mobileConfig?.showEvents || false;
     const iptuEnabled = updatedCity.modules?.iptu?.enabled || false;
+    const smartCityEnabled = updatedCity.mobileConfig?.showSmartCity || false;
+    const emergenciesEnabled = updatedCity.modules?.emergencies?.enabled || updatedCity.mobileConfig?.showEmergencies || false;
+    const newsEnabled = updatedCity.mobileConfig?.showNews || false;
 
     res.status(200).json({
       message: "Configuração mobile atualizada com sucesso!",
@@ -355,6 +496,9 @@ exports.updateMobileConfig = async (req, res) => {
         showHealthAppointments: healthAppointmentsEnabled,
         showEvents: eventsEnabled,
         showIptu: iptuEnabled,
+        showSmartCity: smartCityEnabled,
+        showEmergencies: emergenciesEnabled,
+        showNews: newsEnabled,
       },
     });
   } catch (error) {

@@ -74,3 +74,6 @@ async function updateMobileConfig() {
 // Executar script
 updateMobileConfig();
 
+
+
+

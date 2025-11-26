@@ -25,3 +25,6 @@ router.delete("/deleteEvent/:id", isAdmin, deleteEvent);
 
 module.exports = router;
 
+
+
+
