@@ -82,7 +82,7 @@ exports.createMessage = async (req, res) => {
   }
 };
 
-// Buscar todas as mensagens de um usuário
+// Buscar todas as mensagens de um usuário (incluindo broadcasts da cidade)
 exports.getMessagesByUser = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -94,15 +94,18 @@ exports.getMessagesByUser = async (req, res) => {
       return res.status(400).json({ message: "ID de usuário inválido." });
     }
 
+    // Buscar mensagens diretas para o usuário
+    const query = { userId };
+
     const [messages, total] = await Promise.all([
-      Message.find({ userId })
+      Message.find(query)
         .populate("reportId", "reportType address status")
         .populate("sentBy.adminId", "name")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
-      Message.countDocuments({ userId }),
+      Message.countDocuments(query),
     ]);
 
     const totalPages = Math.ceil(total / limit);
@@ -189,6 +192,7 @@ exports.getUnreadMessagesByUser = async (req, res) => {
       return res.status(400).json({ message: "ID de usuário inválido." });
     }
 
+    // Buscar mensagens não lidas para o usuário
     const messages = await Message.find({ 
       userId, 
       status: "não_lida" 

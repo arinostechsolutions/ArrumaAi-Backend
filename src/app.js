@@ -30,6 +30,8 @@ const streetBlockadeRoutes = require("./routes/streetBlockadeRoutes");
 const smartCityRoutes = require("./routes/smartCityRoutes");
 const emergencyContactRoutes = require("./routes/emergencyContactRoutes");
 const newsRoutes = require("./routes/newsRoutes");
+const mobileAuthRoutes = require("./routes/mobileAuthRoutes");
+const legalDocumentRoutes = require("./routes/legalDocumentRoutes");
 
 // Carrega o arquivo .env baseado no NODE_ENV
 const nodeEnv = process.env.NODE_ENV || "development";
@@ -107,6 +109,8 @@ app.use("/api/street-blockades", streetBlockadeRoutes);
 app.use("/api/smart-city", smartCityRoutes);
 app.use("/api/emergency-contacts", emergencyContactRoutes);
 app.use("/api/news", newsRoutes);
+app.use("/api/mobile-auth", mobileAuthRoutes);
+app.use("/api/legal", legalDocumentRoutes);
 
 const PORT = process.env.PORT || 3000;
 const HOST = "0.0.0.0";

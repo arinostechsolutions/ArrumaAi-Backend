@@ -135,9 +135,7 @@ const UserSchema = new mongoose.Schema(
     },
     passwordHash: {
       type: String,
-      required: function () {
-        return this.isAdmin;
-      },
+      required: false, // Opcional - usuários podem ter ou não senha
       select: false,
     },
     lastLoginAt: {
@@ -152,6 +150,55 @@ const UserSchema = new mongoose.Schema(
         type: Date,
         required: false,
       },
+    },
+    // 📱 Campos para recuperação de senha mobile
+    passwordResetCode: {
+      code: {
+        type: String,
+        required: false,
+      },
+      expiresAt: {
+        type: Date,
+        required: false,
+      },
+    },
+    // 📧 Verificação de email
+    emailVerification: {
+      code: {
+        type: String,
+        required: false,
+      },
+      newEmail: {
+        type: String,
+        required: false,
+      },
+      expiresAt: {
+        type: Date,
+        required: false,
+      },
+    },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    // 📱 Verificação de telefone
+    phoneVerification: {
+      code: {
+        type: String,
+        required: false,
+      },
+      newPhone: {
+        type: String,
+        required: false,
+      },
+      expiresAt: {
+        type: Date,
+        required: false,
+      },
+    },
+    phoneVerified: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

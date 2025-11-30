@@ -1,6 +1,7 @@
 const News = require("../models/News");
 const City = require("../models/City");
 const mongoose = require("mongoose");
+const { notifyNewNews } = require("../services/notificationService");
 
 /**
  * POST /api/news
@@ -57,6 +58,17 @@ exports.createNews = async (req, res) => {
     });
 
     await newNews.save();
+
+    // Se a notícia foi publicada, enviar notificação para os usuários
+    if (newNews.status === "publicado") {
+      notifyNewNews(newNews, {
+        adminId: req.admin.userId,
+        adminName: req.admin.name || "Prefeitura",
+        secretaria: req.admin.secretaria,
+      }).catch((err) => {
+        console.error("❌ Erro ao enviar notificações de notícia:", err);
+      });
+    }
 
     res.status(201).json({
       message: "Notícia criada com sucesso!",

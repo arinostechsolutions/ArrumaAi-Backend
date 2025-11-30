@@ -28,6 +28,7 @@
     "moment-timezone": "^0.5.47",
     "mongoose": "^8.9.6",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.11",
     "sharp": "^0.34.5"
   },
   "devDependencies": {

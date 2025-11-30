@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const City = require("../models/City");
+const { sendEmailVerificationCode } = require("../services/emailService");
 
 exports.checkUserByCPF = async (req, res) => {
   try {
@@ -381,6 +382,293 @@ exports.unhidePost = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Erro ao exibir post:", error);
+    return res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+// ==========================================
+// 📧 ATUALIZAÇÃO DE EMAIL COM VERIFICAÇÃO
+// ==========================================
+
+/**
+ * Gera código de 6 dígitos
+ */
+function generateVerificationCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+/**
+ * POST /api/user/request-email-change
+ * Solicita alteração de email - envia código de verificação para o novo email
+ */
+exports.requestEmailChange = async (req, res) => {
+  try {
+    const { userId, newEmail } = req.body;
+
+    if (!userId || !newEmail) {
+      return res.status(400).json({ message: "userId e newEmail são obrigatórios." });
+    }
+
+    // Validar formato do email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      return res.status(400).json({ message: "Formato de e-mail inválido." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar se o novo email já está em uso por outro usuário
+    const existingUser = await User.findOne({ 
+      email: newEmail.toLowerCase(), 
+      _id: { $ne: userId } 
+    });
+    if (existingUser) {
+      return res.status(400).json({ message: "Este e-mail já está em uso." });
+    }
+
+    // Gerar código de verificação
+    const verificationCode = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // Salvar código no usuário
+    user.emailVerification = {
+      code: verificationCode,
+      newEmail: newEmail.toLowerCase(),
+      expiresAt,
+    };
+    await user.save();
+
+    // Enviar email com o código
+    console.log(`📧 [Email Change] Enviando código de verificação para ${newEmail}...`);
+    const emailSent = await sendEmailVerificationCode(newEmail, verificationCode, user.name);
+
+    if (!emailSent) {
+      console.log(`📧 [Email Change] Email não configurado - código: ${verificationCode}`);
+    }
+
+    return res.status(200).json({
+      message: "Código de verificação enviado para o novo e-mail.",
+      // Em dev (ou se email não configurado), retornar o código para testes
+      ...(!emailSent && { devCode: verificationCode }),
+    });
+
+  } catch (error) {
+    console.error("❌ Erro ao solicitar alteração de email:", error);
+    return res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+/**
+ * POST /api/user/confirm-email-change
+ * Confirma alteração de email com código de verificação
+ */
+exports.confirmEmailChange = async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+
+    if (!userId || !code) {
+      return res.status(400).json({ message: "userId e código são obrigatórios." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar se há solicitação pendente
+    if (!user.emailVerification?.code || !user.emailVerification?.newEmail) {
+      return res.status(400).json({ message: "Nenhuma solicitação de alteração de e-mail pendente." });
+    }
+
+    // Verificar se o código expirou
+    if (new Date() > new Date(user.emailVerification.expiresAt)) {
+      user.emailVerification = undefined;
+      await user.save();
+      return res.status(400).json({ message: "Código expirado. Solicite um novo código." });
+    }
+
+    // Verificar código
+    if (user.emailVerification.code !== code) {
+      return res.status(400).json({ message: "Código inválido." });
+    }
+
+    // Atualizar email
+    const oldEmail = user.email;
+    user.email = user.emailVerification.newEmail;
+    user.emailVerified = true;
+    user.emailVerification = undefined;
+    await user.save();
+
+    console.log(`✅ [Email Change] Email alterado de ${oldEmail} para ${user.email}`);
+
+    return res.status(200).json({
+      message: "E-mail atualizado com sucesso!",
+      email: user.email,
+    });
+
+  } catch (error) {
+    console.error("❌ Erro ao confirmar alteração de email:", error);
+    return res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+// ==========================================
+// 📱 ATUALIZAÇÃO DE TELEFONE COM VERIFICAÇÃO
+// ==========================================
+
+/**
+ * POST /api/user/request-phone-change
+ * Solicita alteração de telefone - envia código de verificação via SMS
+ */
+exports.requestPhoneChange = async (req, res) => {
+  try {
+    const { userId, newPhone } = req.body;
+
+    if (!userId || !newPhone) {
+      return res.status(400).json({ message: "userId e newPhone são obrigatórios." });
+    }
+
+    // Normalizar telefone (remover formatação)
+    const normalizedPhone = newPhone.replace(/\D/g, "");
+
+    // Validar formato do telefone (11 dígitos para celular brasileiro)
+    if (normalizedPhone.length !== 11) {
+      return res.status(400).json({ message: "Telefone deve ter 11 dígitos (DDD + número)." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar se o novo telefone já está em uso por outro usuário
+    const existingUser = await User.findOne({ 
+      phone: normalizedPhone, 
+      _id: { $ne: userId } 
+    });
+    if (existingUser) {
+      return res.status(400).json({ message: "Este telefone já está em uso." });
+    }
+
+    // Gerar código de verificação
+    const verificationCode = generateVerificationCode();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
+
+    // Salvar código no usuário
+    user.phoneVerification = {
+      code: verificationCode,
+      newPhone: normalizedPhone,
+      expiresAt,
+    };
+    await user.save();
+
+    // TODO: Enviar SMS com o código
+    // Por enquanto, em desenvolvimento, retornamos o código
+    console.log(`📱 [Phone Change] Código de verificação para ${normalizedPhone}: ${verificationCode}`);
+
+    // Em produção, enviar SMS real via Twilio, AWS SNS, etc.
+    // await sendVerificationSMS(normalizedPhone, verificationCode);
+
+    return res.status(200).json({
+      message: "Código de verificação enviado para o novo telefone.",
+      // Em dev, retornar o código para testes
+      ...(process.env.NODE_ENV === "development" && { devCode: verificationCode }),
+    });
+
+  } catch (error) {
+    console.error("❌ Erro ao solicitar alteração de telefone:", error);
+    return res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+/**
+ * POST /api/user/confirm-phone-change
+ * Confirma alteração de telefone com código de verificação
+ */
+exports.confirmPhoneChange = async (req, res) => {
+  try {
+    const { userId, code } = req.body;
+
+    if (!userId || !code) {
+      return res.status(400).json({ message: "userId e código são obrigatórios." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    // Verificar se há solicitação pendente
+    if (!user.phoneVerification?.code || !user.phoneVerification?.newPhone) {
+      return res.status(400).json({ message: "Nenhuma solicitação de alteração de telefone pendente." });
+    }
+
+    // Verificar se o código expirou
+    if (new Date() > new Date(user.phoneVerification.expiresAt)) {
+      user.phoneVerification = undefined;
+      await user.save();
+      return res.status(400).json({ message: "Código expirado. Solicite um novo código." });
+    }
+
+    // Verificar código
+    if (user.phoneVerification.code !== code) {
+      return res.status(400).json({ message: "Código inválido." });
+    }
+
+    // Atualizar telefone
+    const oldPhone = user.phone;
+    user.phone = user.phoneVerification.newPhone;
+    user.phoneVerified = true;
+    user.phoneVerification = undefined;
+    await user.save();
+
+    console.log(`✅ [Phone Change] Telefone alterado de ${oldPhone} para ${user.phone}`);
+
+    return res.status(200).json({
+      message: "Telefone atualizado com sucesso!",
+      phone: user.phone,
+    });
+
+  } catch (error) {
+    console.error("❌ Erro ao confirmar alteração de telefone:", error);
+    return res.status(500).json({ message: "Erro interno do servidor." });
+  }
+};
+
+/**
+ * GET /api/user/profile/:userId
+ * Retorna os dados do perfil do usuário
+ */
+exports.getProfile = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const user = await User.findById(userId).populate("city", "id label");
+
+    if (!user) {
+      return res.status(404).json({ message: "Usuário não encontrado." });
+    }
+
+    return res.status(200).json({
+      _id: user._id,
+      name: user.name,
+      cpf: user.cpf,
+      email: user.email || null,
+      emailVerified: user.emailVerified || false,
+      phone: user.phone,
+      phoneVerified: user.phoneVerified || false,
+      birthDate: user.birthDate,
+      profileImage: user.profileImage,
+      address: user.address,
+      city: user.city,
+      isAdmin: user.isAdmin,
+    });
+
+  } catch (error) {
+    console.error("❌ Erro ao buscar perfil:", error);
     return res.status(500).json({ message: "Erro interno do servidor." });
   }
 };

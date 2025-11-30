@@ -10,6 +10,7 @@ const {
   deleteBlockade,
   updateExpiredBlockades,
   removeProblematicIndex,
+  getBlockadeStats,
 } = require("../controllers/streetBlockadeController");
 
 const { paginationMiddleware } = require("../middlewares/paginationMiddleware");
@@ -22,6 +23,7 @@ router.get("/map/:cityId", getActiveBlockadesForMap);
 router.get("/active/:cityId", paginationMiddleware, getActiveBlockades);
 
 // Rotas administrativas
+router.get("/stats/:cityId", isAdmin, getBlockadeStats);
 router.get("/all/:cityId", isAdmin, paginationMiddleware, getAllBlockades);
 router.get("/:id", isAdmin, getBlockadeById);
 router.post("/create", isAdmin, createBlockade);

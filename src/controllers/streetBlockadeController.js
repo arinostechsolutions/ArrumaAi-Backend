@@ -1,6 +1,7 @@
 const moment = require("moment-timezone");
 const StreetBlockade = require("../models/StreetBlockade");
 const City = require("../models/City");
+const { notifyNewBlockade, notifyBlockadeCompleted } = require("../services/notificationService");
 
 // Criar uma nova interdição de rua
 exports.createBlockade = async (req, res) => {
@@ -103,6 +104,15 @@ exports.createBlockade = async (req, res) => {
     });
 
     await newBlockade.save();
+
+    // Enviar notificação para todos os usuários da cidade
+    notifyNewBlockade(newBlockade, {
+      adminId: req.admin.userId,
+      adminName: req.admin.name || "Prefeitura",
+      secretaria: req.admin.secretaria,
+    }).catch((err) => {
+      console.error("❌ Erro ao enviar notificações de interdição:", err);
+    });
 
     res.status(201).json({
       message: "Interdição criada com sucesso!",
@@ -398,8 +408,20 @@ exports.updateBlockadeStatus = async (req, res) => {
       return res.status(404).json({ message: "Interdição não encontrada." });
     }
 
+    const previousStatus = blockade.status;
     blockade.status = status;
     await blockade.save();
+
+    // Se a interdição foi encerrada (obra concluída), notificar usuários
+    if (status === "encerrado" && previousStatus !== "encerrado") {
+      notifyBlockadeCompleted(blockade, {
+        adminId: req.admin?.userId,
+        adminName: req.admin?.name || "Prefeitura",
+        secretaria: req.admin?.secretaria,
+      }).catch((err) => {
+        console.error("❌ Erro ao enviar notificações de obra concluída:", err);
+      });
+    }
 
     res.status(200).json({
       message: "Status da interdição atualizado com sucesso!",
@@ -475,6 +497,167 @@ exports.removeProblematicIndex = async (req, res) => {
     res.status(500).json({
       message: "Erro ao remover índices.",
       error: error.message,
+    });
+  }
+};
+
+// Estatísticas de interdições para o dashboard
+exports.getBlockadeStats = async (req, res) => {
+  try {
+    const { cityId } = req.params;
+    const { startDate, endDate } = req.query;
+
+    if (!cityId) {
+      return res.status(400).json({ message: "ID da cidade é obrigatório." });
+    }
+
+    const now = new Date();
+    const query = { cityId };
+
+    // Filtro de período se fornecido
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    }
+
+    // Buscar todas as interdições para estatísticas
+    const allBlockades = await StreetBlockade.find(query).lean();
+
+    // Contagem por status
+    const byStatus = {
+      agendado: 0,
+      ativo: 0,
+      encerrado: 0,
+      cancelado: 0,
+    };
+
+    // Contagem por tipo
+    const byType = {
+      evento: 0,
+      obra: 0,
+      emergencia: 0,
+      manutencao: 0,
+      outro: 0,
+    };
+
+    // Contagem por nível de impacto
+    const byImpact = {
+      baixo: 0,
+      medio: 0,
+      alto: 0,
+      total: 0,
+    };
+
+    // Contagem por bairro
+    const byNeighborhood = {};
+
+    // Contagem por mês (últimos 12 meses)
+    const byMonth = {};
+    const last12Months = [];
+    for (let i = 11; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      last12Months.push(key);
+      byMonth[key] = { total: 0, evento: 0, obra: 0, emergencia: 0, manutencao: 0, outro: 0 };
+    }
+
+    // Duração média das interdições (em dias)
+    let totalDuration = 0;
+    let countWithDuration = 0;
+
+    // Processar cada interdição
+    allBlockades.forEach((blockade) => {
+      // Por status
+      if (byStatus[blockade.status] !== undefined) {
+        byStatus[blockade.status]++;
+      }
+
+      // Por tipo
+      if (byType[blockade.type] !== undefined) {
+        byType[blockade.type]++;
+      }
+
+      // Por impacto
+      if (blockade.impact?.level && byImpact[blockade.impact.level] !== undefined) {
+        byImpact[blockade.impact.level]++;
+      }
+
+      // Por bairro
+      const neighborhood = blockade.route?.neighborhood || "Não informado";
+      byNeighborhood[neighborhood] = (byNeighborhood[neighborhood] || 0) + 1;
+
+      // Por mês
+      const createdDate = new Date(blockade.createdAt);
+      const monthKey = `${createdDate.getFullYear()}-${String(createdDate.getMonth() + 1).padStart(2, "0")}`;
+      if (byMonth[monthKey]) {
+        byMonth[monthKey].total++;
+        if (byMonth[monthKey][blockade.type] !== undefined) {
+          byMonth[monthKey][blockade.type]++;
+        }
+      }
+
+      // Duração
+      if (blockade.startDate && blockade.endDate) {
+        const start = new Date(blockade.startDate);
+        const end = new Date(blockade.endDate);
+        const durationDays = (end - start) / (1000 * 60 * 60 * 24);
+        if (durationDays > 0) {
+          totalDuration += durationDays;
+          countWithDuration++;
+        }
+      }
+    });
+
+    // Calcular duração média
+    const avgDuration = countWithDuration > 0 ? (totalDuration / countWithDuration).toFixed(1) : 0;
+
+    // Ordenar bairros por quantidade
+    const sortedNeighborhoods = Object.entries(byNeighborhood)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, count]) => ({ name, count }));
+
+    // Formatar dados por mês para gráfico
+    const monthlyData = last12Months.map((month) => ({
+      month,
+      label: new Date(month + "-01").toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+      ...byMonth[month],
+    }));
+
+    // Interdições ativas agora
+    const activeNow = allBlockades.filter(
+      (b) => b.status === "ativo" || (b.status === "agendado" && new Date(b.startDate) <= now)
+    ).length;
+
+    // Interdições agendadas para os próximos 7 dias
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    const upcomingWeek = allBlockades.filter(
+      (b) => b.status === "agendado" && new Date(b.startDate) > now && new Date(b.startDate) <= nextWeek
+    ).length;
+
+    res.status(200).json({
+      cityId,
+      summary: {
+        total: allBlockades.length,
+        activeNow,
+        upcomingWeek,
+        avgDurationDays: parseFloat(avgDuration),
+      },
+      byStatus,
+      byType,
+      byImpact,
+      topNeighborhoods: sortedNeighborhoods,
+      monthlyTrend: monthlyData,
+      generatedAt: now.toISOString(),
+    });
+  } catch (error) {
+    console.error("Erro ao gerar estatísticas:", error);
+    res.status(500).json({
+      message: "Erro interno do servidor.",
     });
   }
 };

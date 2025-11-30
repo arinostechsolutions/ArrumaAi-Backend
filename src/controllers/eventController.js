@@ -1,6 +1,7 @@
 const moment = require("moment-timezone");
 const Event = require("../models/Event");
 const City = require("../models/City");
+const { notifyNewEvent } = require("../services/notificationService");
 
 // Criar evento
 exports.createEvent = async (req, res) => {
@@ -62,6 +63,18 @@ exports.createEvent = async (req, res) => {
     });
 
     await newEvent.save();
+
+    // Enviar notificação para todos os usuários da cidade
+    notifyNewEvent(
+      { ...newEvent.toObject(), cityId: city.id },
+      {
+        adminId: req.admin?.userId,
+        adminName: req.admin?.name || "Prefeitura",
+        secretaria: req.admin?.secretaria,
+      }
+    ).catch((err) => {
+      console.error("❌ Erro ao enviar notificações de evento:", err);
+    });
 
     res.status(201).json({
       message: "Evento criado com sucesso!",
